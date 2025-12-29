@@ -20,8 +20,7 @@ ticker_map = {
     'TSM': 'TSMC', 'MU': '마이크론', 'SMCI': '슈퍼마이크로', 
     'PYPL': '페이팔', 'PANW': '팔로알토', 
     'COST': '코스트코', 'QCOM': '퀄컴', 'ASML': 'ASML', 'SNOW': '스노우플레이크', 
-    'MARA': '마라톤디지털', 'RIOT': '라이엇플랫폼', 'VRT': '버티브 홀딩스', 
-    'ANET': '아리스타 네트웍스', 'LLY': '일라이 릴리'
+    'MARA': '마라톤디지털', 'ANET': '아리스타 네트웍스'
 }
 
 ignition_alarms = []
