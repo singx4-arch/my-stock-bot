@@ -84,7 +84,8 @@ for symbol in tickers:
         if isinstance(df_d.columns, pd.MultiIndex): 
             df_d.columns = df_d.columns.get_level_values(0)
         
-        df_d['MA7'] = df_d['Close'].rolling(window=7).mean()
+        # 일봉 7SMMA 및 20MA 계산이다
+        df_d['SMMA7'] = df_d['Close'].ewm(alpha=1/7, adjust=False).mean()
         df_d['MA20'] = df_d['Close'].rolling(window=20).mean()
         df_d['Vol_MA20'] = df_d['Volume'].rolling(window=20).mean()
         df_d['RSI'] = calculate_rsi(df_d['Close'])
@@ -94,19 +95,20 @@ for symbol in tickers:
         prev = df_d.iloc[-2]
         
         c_price = float(curr['Close'])
-        c_ma7 = float(curr['MA7'])
+        c_smma7 = float(curr['SMMA7'])
         c_ma20 = float(curr['MA20'])
         c_vol = float(curr['Volume'])
         a_vol = float(curr['Vol_MA20'])
         c_rsi = float(curr['RSI'])
         c_adx = float(curr['ADX'])
         
-        p_ma7 = float(prev['MA7'])
+        p_smma7 = float(prev['SMMA7'])
         p_ma20 = float(prev['MA20'])
 
-        is_gc = p_ma7 < p_ma20 and c_ma7 > c_ma20
+        # 일봉 골든 크로스 (7SMMA가 20MA 돌파) 및 추세 확인이다
+        is_gc = p_smma7 < p_ma20 and c_smma7 > c_ma20
         is_uptrend = c_price > c_ma20
-        is_touch_ma7 = abs(c_price - c_ma7) / c_ma7 <= 0.01
+        is_touch_ma7 = abs(c_price - c_smma7) / c_smma7 <= 0.01
         
         if is_gc: golden_cross_list.append(f"{name}({symbol})")
         if c_vol > a_vol * 1.5: high_volume_list.append(f"{name}({symbol})")
@@ -127,20 +129,22 @@ for symbol in tickers:
             if isinstance(df_w.columns, pd.MultiIndex): 
                 df_w.columns = df_w.columns.get_level_values(0)
             
-            df_w['WMA7'] = df_w['Close'].rolling(window=7).mean()
+            # 주봉 7SMMA 및 20MA 계산이다
+            df_w['WSMMA7'] = df_w['Close'].ewm(alpha=1/7, adjust=False).mean()
             df_w['WMA20'] = df_w['Close'].rolling(window=20).mean()
             
             w_curr = df_w.iloc[-1]
             w_prev = df_w.iloc[-2]
             
             w_c_price = float(w_curr['Close'])
-            w_c_ma7 = float(w_curr['WMA7'])
+            w_c_smma7 = float(w_curr['WSMMA7'])
             w_c_ma20 = float(w_curr['WMA20'])
-            w_p_ma7 = float(w_prev['WMA7'])
+            w_p_smma7 = float(w_prev['WSMMA7'])
             w_p_ma20 = float(w_prev['WMA20'])
             
-            is_w_gc = w_p_ma7 < w_p_ma20 and w_c_ma7 > w_c_ma20
-            is_above_ma = w_c_price > w_c_ma7 and w_c_price > w_c_ma20
+            # 주봉 골든 크로스 확인 및 가격 위치 조건이다
+            is_w_gc = w_p_smma7 < w_p_ma20 and w_c_smma7 > w_c_ma20
+            is_above_ma = w_c_price > w_c_smma7 and w_c_price > w_c_ma20
             
             if is_w_gc and is_above_ma:
                 long_trend_list.append(f"{name}({symbol})")
@@ -166,13 +170,13 @@ for symbol in tickers:
 report = []
 report.append("📢 실시간 주식 시장 분석 보고서이다")
 report.append("-" * 20)
-report.append("1. 7일/20일 이평선 골든 크로스 발생 종목이다:")
+report.append("1. 7SMMA/20일 이평선 골든 크로스 발생 종목이다:")
 report.append(", ".join(golden_cross_list) if golden_cross_list else "없음")
 report.append("\n2. 거래량 급증 종목이다 (평균 1.5배 이상):")
 report.append(", ".join(high_volume_list) if high_volume_list else "없음")
 report.append("\n3. 단기 상승 추세인 종목이다 (일봉 20MA 상회):")
 report.append(", ".join(uptrend_list) if uptrend_list else "없음")
-report.append("\n4. 7SMA 지지/저항 근접 구간이다:")
+report.append("\n4. 7SMMA 지지/저항 근접 구간이다:")
 report.append(", ".join(touch_ma7_list) if touch_ma7_list else "없음")
 report.append("\n5. 20일선 지지 확인 구간이다:")
 report.append(", ".join(support_list) if support_list else "없음")
@@ -185,6 +189,6 @@ report.append(", ".join(long_trend_list) if long_trend_list else "없음")
 report.append("-" * 20)
 report.append("💡 오늘의 매수 추천 종목이다 (추세 강도 중심):")
 report.append(", ".join(recommend_list) if recommend_list else "없음")
-report.append("\n주봉으로 20일 이동평균선과 7smma 위에 있는 종목들만 장기 상승 추세입니다.")
+report.append("\n장기 상승 추세는 주봉 기준 골든 크로스가 발생하고, 가격이 7smma와 20일 이동평균선 위에 있는 종목입니다.")
 
 send_message("\n".join(report))
