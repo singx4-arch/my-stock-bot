@@ -1,5 +1,6 @@
 import yfinance as yf
 import pandas as pd
+import numpy as np
 import requests
 import os
 
@@ -32,6 +33,26 @@ def calculate_rsi(data, window=14):
     rs = gain / loss
     return 100 - (100 / (1 + rs))
 
+def calculate_adx(df, window=14):
+    # ADX 계산 함수이다
+    plus_dm = df['High'].diff()
+    minus_dm = df['Low'].diff()
+    plus_dm[plus_dm < 0] = 0
+    minus_dm[minus_dm > 0] = 0
+    
+    tr1 = pd.DataFrame(df['High'] - df['Low'])
+    tr2 = pd.DataFrame(abs(df['High'] - df['Close'].shift(1)))
+    tr3 = pd.DataFrame(abs(df['Low'] - df['Close'].shift(1)))
+    frames = [tr1, tr2, tr3]
+    tr = pd.concat(frames, axis=1, join='inner').max(axis=1)
+    atr = tr.rolling(window).mean()
+    
+    plus_di = 100 * (plus_dm.rolling(window).mean() / atr)
+    minus_di = 100 * (abs(minus_dm).rolling(window).mean() / atr)
+    dx = (abs(plus_di - minus_di) / (plus_di + minus_di)) * 100
+    adx = dx.rolling(window).mean()
+    return adx
+
 # 종목 리스트이다
 ticker_map = {
     'NVDA': '엔비디아', 'TSLA': '테슬라', 'AAPL': '애플', 'MSFT': '마이크로소프트', 
@@ -46,7 +67,10 @@ ticker_map = {
 
 tickers = list(ticker_map.keys())
 
-# 결과 저장용 리스트들이다
+# 베타 계산을 위한 시장(QQQ) 데이터이다
+market_df = yf.download('QQQ', period='1y', interval='1d', progress=False)
+market_returns = market_df['Close'].pct_change().dropna()
+
 golden_cross_list = []
 high_volume_list = []
 uptrend_list = []
@@ -54,20 +78,30 @@ touch_ma7_list = []
 support_list = []
 bb_alert_list = []
 rsi_alert_list = []
-recommend_list = [] # 매수 추천 종목 리스트이다
+recommend_list = []
 
 for symbol in tickers:
     name = ticker_map[symbol]
     try:
-        df_d = yf.download(symbol, period='60d', interval='1d', progress=False)
-        if df_d.empty or len(df_d) < 21: continue
+        # 일봉 데이터 분석이다 (베타 계산을 위해 1년치를 가져온다)
+        df_d = yf.download(symbol, period='1y', interval='1d', progress=False)
+        if df_d.empty or len(df_d) < 30: continue
         if isinstance(df_d.columns, pd.MultiIndex): 
             df_d.columns = df_d.columns.get_level_values(0)
         
+        # 지표 계산이다
         df_d['MA7'] = df_d['Close'].rolling(window=7).mean()
         df_d['MA20'] = df_d['Close'].rolling(window=20).mean()
         df_d['Vol_MA20'] = df_d['Volume'].rolling(window=20).mean()
         df_d['RSI'] = calculate_rsi(df_d['Close'])
+        df_d['ADX'] = calculate_adx(df_d)
+        
+        # 베타 계산이다
+        stock_returns = df_d['Close'].pct_change().dropna()
+        common_idx = stock_returns.index.intersection(market_returns.index)
+        cov = np.cov(stock_returns.loc[common_idx], market_returns.loc[common_idx])[0][1]
+        var = np.var(market_returns.loc[common_idx])
+        beta = cov / var
         
         curr = df_d.iloc[-1]
         prev = df_d.iloc[-2]
@@ -78,10 +112,11 @@ for symbol in tickers:
         c_vol = float(curr['Volume'])
         a_vol = float(curr['Vol_MA20'])
         c_rsi = float(curr['RSI'])
+        c_adx = float(curr['ADX'])
+        
         p_ma7 = float(prev['MA7'])
         p_ma20 = float(prev['MA20'])
 
-        # 조건별 판별 로직이다
         is_gc = p_ma7 < p_ma20 and c_ma7 > c_ma20
         is_uptrend = c_price > c_ma20
         is_touch_ma7 = abs(c_price - c_ma7) / c_ma7 <= 0.01
@@ -96,14 +131,15 @@ for symbol in tickers:
         if c_rsi >= 70: rsi_alert_list.append(f"{name}({symbol}) 과열")
         elif c_rsi <= 30: rsi_alert_list.append(f"{name}({symbol}) 침체")
 
-        # 추천 로직: 골든크로스 혹은 상승추세이면서 7일선 지지를 받는 경우이다
-        if (is_gc or is_uptrend) and is_touch_ma7:
+        # 추천 로직: (GC 혹은 상승추세) + 7일선 지지 + ADX 25 이상(강한 추세) + 베타 1.2 미만(안정성)이다
+        if (is_gc or is_uptrend) and is_touch_ma7 and c_adx >= 25 and beta < 1.2:
             recommend_list.append(f"{name}({symbol})")
 
-        # 4시간 봉 분석이다
+        # 4시간 봉 볼린저 밴드 분석이다
         df_4h = yf.download(symbol, period='30d', interval='4h', progress=False)
         if not df_4h.empty and len(df_4h) >= 20:
-            if isinstance(df_4h.columns, pd.MultiIndex): df_4h.columns = df_4h.columns.get_level_values(0)
+            if isinstance(df_4h.columns, pd.MultiIndex): 
+                df_4h.columns = df_4h.columns.get_level_values(0)
             df_4h['MA'] = df_4h['Close'].rolling(window=20).mean()
             df_4h['STD'] = df_4h['Close'].rolling(window=20).std()
             u_bb = df_4h['MA'] + (df_4h['STD'] * 2)
@@ -135,7 +171,7 @@ report.append(", ".join(bb_alert_list) if bb_alert_list else "없음")
 report.append("\n7. RSI 지표 과열/침체 신호이다:")
 report.append(", ".join(rsi_alert_list) if rsi_alert_list else "없음")
 report.append("-" * 20)
-report.append("💡 오늘의 매수 추천 종목이다 (추세+지지):")
+report.append("💡 오늘의 매수 추천 종목이다 (추세강도+안정성):")
 report.append(", ".join(recommend_list) if recommend_list else "없음")
 
 send_message("\n".join(report))
