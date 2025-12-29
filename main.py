@@ -64,7 +64,7 @@ recommend_list = []
 for symbol in tickers:
     name = ticker_map[symbol]
     try:
-        # 1. 일봉 데이터 분석이다이다
+        # 1. 일봉 분석이다
         df_d = yf.download(symbol, period='2y', interval='1d', progress=False)
         if df_d.empty or len(df_d) < 200: continue
         if isinstance(df_d.columns, pd.MultiIndex): 
@@ -82,11 +82,9 @@ for symbol in tickers:
         c_ma20 = float(curr['MA20'])
         c_smma7 = float(curr['SMMA7'])
 
-        # RSI 30 부근 감지이다이다
         if 28 <= c_rsi <= 33:
             rsi_30_list.append(f"{name}({symbol})")
 
-        # 다이버전스 분석이다이다
         lookback = df_d.iloc[-25:-2]
         low_price_idx = lookback['Low'].idxmin()
         prev_low_price = float(lookback.loc[low_price_idx, 'Low'])
@@ -97,21 +95,20 @@ for symbol in tickers:
         high_price_idx = lookback['High'].idxmax()
         prev_high_price = float(lookback.loc[high_price_idx, 'High'])
         prev_high_rsi = float(lookback.loc[high_price_idx, 'RSI'])
-        # 이 부분이 오류가 났던 101번 라인 수정이다이다
         if float(curr['High']) > prev_high_price and c_rsi < prev_high_rsi and c_rsi > 55:
             bear_div_list.append(f"{name}({symbol})")
 
-        # 7SMMA 위에서 지지 받는 종목이다이다
+        # 7SMMA 지지 로직이다
         is_near_smma7 = abs(c_price - c_smma7) / c_smma7 <= 0.01
         if is_near_smma7 and c_price >= c_smma7:
             support_smma7_list.append(f"{name}({symbol}) (매수기회가 왔습니다!!)")
 
-        # 7SMMA는 하향 이탈했지만 20일선에서 지지받는 종목이다이다
+        # 20일선 지지 로직이다
         is_near_ma20 = abs(c_price - c_ma20) / c_ma20 <= 0.01
         if c_price < c_smma7 and is_near_ma20 and c_price >= c_ma20:
             support_ma20_list.append(f"{name}({symbol}) (매수기회가 왔습니다!!)")
 
-        # 2. 주봉 분석이다이다
+        # 2. 주봉 분석이다
         df_w = yf.download(symbol, period='2y', interval='1wk', progress=False)
         if not df_w.empty and len(df_w) >= 21:
             if isinstance(df_w.columns, pd.MultiIndex): 
@@ -125,17 +122,17 @@ for symbol in tickers:
             if w_c_price > w_c_smma7 and w_c_price > w_c_ma20:
                 long_trend_list.append(f"{name}({symbol})")
 
-        # 3. 매수 추천 로직 (20일선 위 + 골든크로스 상태) 이다이다
+        # 3. 매수 추천 로직이다
         if c_price > c_ma20 and c_smma7 > c_ma20:
             recommend_list.append(f"{name}({symbol})")
 
     except Exception as e:
-        print(f"{symbol} 분석 중 오류 발생했다이다: {e}")
+        print(f"{symbol} 분석 실패했다이다: {e}")
         continue
 
-# 리포트 구성이다이다
+# 리포트 구성이다
 report = []
-report.append("📢 실시간 주식 분석 리포트이다이다")
+report.append("📢 실시간 주식 분석 리포트이다")
 report.append("-" * 20)
 report.append("1. RSI 30 부근 (바닥권):")
 report.append(", ".join(rsi_30_list) if rsi_30_list else "없음")
@@ -146,4 +143,12 @@ report.append(", ".join(bear_div_list) if bear_div_list else "없음")
 report.append("\n4. 7SMMA 지지 (이평선 위):")
 report.append(", ".join(support_smma7_list) if support_smma7_list else "없음")
 report.append("\n5. 20일선 지지 (7SMMA 하회 시):")
-report.append(", ".join(support_ma20_list) if support_ma20_list else "없음
+# 아래 줄이 오류가 났던 149번 라인 수정본이다
+report.append(", ".join(support_ma20_list) if support_ma20_list else "없음")
+report.append("\n6. 장기 상승 추세 종목:")
+report.append(", ".join(long_trend_list) if long_trend_list else "없음")
+report.append("-" * 20)
+report.append("💡 오늘의 매수 추천 종목 (20MA 위 + 골든크로스):")
+report.append(", ".join(recommend_list) if recommend_list else "없음")
+
+send_message("\n".join(report))
