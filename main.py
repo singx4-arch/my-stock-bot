@@ -8,11 +8,21 @@ token = os.getenv('TELEGRAM_TOKEN')
 chat_id = os.getenv('TELEGRAM_CHAT_ID')
 
 def send_message(text):
+    if not token or not chat_id:
+        print("토큰이나 채팅 아이디가 설정되지 않았다")
+        return
     if len(text) > 4000: 
         text = text[:4000] + "...(중략)"
-    url = f"https://api.telegram.org/bot{token}/sendMessage?chat_id={chat_id}&text={text}&parse_mode=Markdown"
+    
+    url = f"https://api.telegram.org/bot{token}/sendMessage"
+    params = {
+        'chat_id': chat_id,
+        'text': text,
+        'parse_mode': 'Markdown'
+    }
     try: 
-        requests.get(url)
+        # 이 부분이 send_message로 정확히 호출되어야 한다
+        requests.get(url, params=params)
     except Exception as e: 
         print(f"전송 실패했다: {e}")
 
@@ -37,11 +47,11 @@ ticker_map = {
 
 tickers = list(ticker_map.keys())
 
-uptrend_list = []
-support_list = []
-touch_ma7_list = []
-bb_alert_list = []
-rsi_alert_list = []
+uptrend_list = []      # 상승 추세 리스트이다
+support_list = []      # 20일선 지지 리스트이다
+touch_ma7_list = []    # 7SMA 근접 리스트이다
+bb_alert_list = []     # 볼린저 밴드 리스트이다
+rsi_alert_list = []    # RSI 리스트이다
 
 for symbol in tickers:
     name = ticker_map[symbol]
@@ -59,10 +69,11 @@ for symbol in tickers:
         ma20_d = float(df_d['MA20'].iloc[-1])
         rsi_d = float(df_d['RSI'].iloc[-1])
         
-        # 숫자 정보를 빼고 종목명만 추가한다
+        # 7SMA 근접 확인이다
         if abs(curr_d - ma7_d) / ma7_d <= 0.01:
             touch_ma7_list.append(f"⚡ {name}({symbol})")
             
+        # 상승 추세 및 20일선 지지 확인이다
         if curr_d > ma20_d:
             uptrend_list.append(f"{name}({symbol})")
             if curr_d <= ma20_d * 1.01:
@@ -90,6 +101,7 @@ for symbol in tickers:
             
     except: continue
 
+# 최종 메시지 구성이다
 msg = "📢 실시간 주식 시장 분석 보고서이다\n\n"
 msg += "✅ 현재 상승 추세인 종목이다:\n" + (", ".join(uptrend_list) if uptrend_list else "없음") + "\n\n"
 msg += "⚡ 7SMA 지지/저항 근접 구간이다:\n" + (", ".join(touch_ma7_list) if touch_ma7_list else "없음") + "\n\n"
@@ -97,4 +109,5 @@ msg += "🎯 20일선 지지 확인 구간이다:\n" + (", ".join(support_list) 
 msg += "📊 4시간 봉 변동성 포착이다:\n" + (", ".join(bb_alert_list) if bb_alert_list else "없음") + "\n\n"
 msg += "📈 RSI 지표 과열/침체 신호이다:\n" + (", ".join(rsi_alert_list) if rsi_alert_list else "없음")
 
-send
+# 이 부분을 send_message(msg)로 정확히 수정했다
+send_message(msg)
