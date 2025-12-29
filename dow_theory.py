@@ -12,7 +12,7 @@ def send_message(text):
     params = {'chat_id': chat_id, 'text': text, 'parse_mode': 'Markdown'}
     requests.get(url, params=params)
 
-# 재혁님이 요청한 나스닥 핵심 15개 우량주 리스트이다
+# 나스닥 핵심 15개 우량 기술주 리스트이다
 ticker_map = {
     'NVDA': '엔비디아', 'TSLA': '테슬라', 'AAPL': '애플', 'MSFT': '마이크로소프트',
     'AMZN': '아마존', 'META': '메타', 'GOOGL': '구글', 'AMD': 'AMD',
@@ -20,7 +20,7 @@ ticker_map = {
     'PANW': '팔로알토', 'QCOM': '퀄컴', 'ASML': 'ASML'
 }
 
-dow_trends = []
+trend_results = []
 
 for symbol, name in ticker_map.items():
     try:
@@ -28,7 +28,7 @@ for symbol, name in ticker_map.items():
         if len(df) < 30: continue
         if isinstance(df.columns, pd.MultiIndex): df.columns = df.columns.get_level_values(0)
 
-        # 최근 5일간의 평균과 이전 20일간의 데이터를 비교한다이다
+        # 분석 구간 설정이다 (최근 5일 vs 이전 20일)
         recent = df.iloc[-5:]
         previous = df.iloc[-25:-5]
 
@@ -37,23 +37,23 @@ for symbol, name in ticker_map.items():
         prev_high = float(previous['High'].max())
         prev_low = float(previous['Low'].min())
 
-        # 다우 이론: 고점과 저점이 모두 이전보다 높아졌는가?
-        is_higher_high = curr_high > prev_high
-        is_higher_low = curr_low > prev_low
+        # 다우 이론 추세 판별 로직이다
+        # 1. 상승 추세: 고점과 저점이 모두 높아짐이다
+        is_uptrend = curr_high > prev_high and curr_low > prev_low
+        # 2. 하락 추세: 고점과 저점이 모두 낮아짐이다
+        is_downtrend = curr_high < prev_high and curr_low < prev_low
 
-        # 거래량 확인: 최근 5일 평균 거래량이 이전 20일 평균보다 많은가?
-        curr_vol_avg = float(recent['Volume'].mean())
-        prev_vol_avg = float(previous['Volume'].mean())
-        vol_confirmation = curr_vol_avg > prev_vol_avg
-
-        if is_higher_high and is_higher_low:
-            status = "📈 상승 추세 확정" if vol_confirmation else "↗️ 상승 추세 진행 중(거래량 미달)"
-            dow_trends.append(f"✅ {name}({symbol})\n- 고점/저점 모두 상승했다이다.\n- {status}")
+        if is_uptrend:
+            trend_results.append(f"📈 [상승 추세] {name}({symbol})\n- 이전보다 고점과 저점을 높이며 우상향 중이다.")
+        elif is_downtrend:
+            trend_results.append(f"📉 [하락 추세] {name}({symbol})\n- 이전보다 고점과 저점이 낮아지며 우하향 중이다.")
+        else:
+            trend_results.append(f"↔️ [보합/혼조] {name}({symbol})\n- 명확한 방향성 없이 박스권이나 변곡점에 있다.")
             
     except: continue
 
-if dow_trends:
-    msg = "🏛️ [다우 이론] 추세 분석 리포트이다\n" + "-" * 20 + "\n"
-    msg += "\n\n".join(dow_trends)
-    msg += "\n\n추세는 명확한 반전 신호가 있을 때까지 지속된다는 것이 다우 이론의 핵심이다이다."
+if trend_results:
+    msg = "🏛️ [다우 이론] 실시간 추세 판독 리포트이다\n" + "-" * 20 + "\n"
+    msg += "\n\n".join(trend_results)
+    msg += "\n\n다우 이론에 따르면 추세는 반전 신호가 나오기 전까지 지속된다이다."
     send_message(msg)
