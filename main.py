@@ -21,7 +21,6 @@ def send_message(text):
         'parse_mode': 'Markdown'
     }
     try: 
-        # 이 부분이 send_message로 정확히 호출되어야 한다
         requests.get(url, params=params)
     except Exception as e: 
         print(f"전송 실패했다: {e}")
@@ -69,20 +68,19 @@ for symbol in tickers:
         ma20_d = float(df_d['MA20'].iloc[-1])
         rsi_d = float(df_d['RSI'].iloc[-1])
         
-        # 7SMA 근접 확인이다
+        # 번개 이모지를 제거했다
         if abs(curr_d - ma7_d) / ma7_d <= 0.01:
-            touch_ma7_list.append(f"⚡ {name}({symbol})")
+            touch_ma7_list.append(f"{name}({symbol})")
             
-        # 상승 추세 및 20일선 지지 확인이다
         if curr_d > ma20_d:
             uptrend_list.append(f"{name}({symbol})")
             if curr_d <= ma20_d * 1.01:
-                support_list.append(f"🎯 {name}({symbol})")
+                support_list.append(f" {name}({symbol})")
         
         if rsi_d >= 70:
-            rsi_alert_list.append(f"🔥 {name}({symbol}) 과열")
+            rsi_alert_list.append(f" {name}({symbol}) 과열")
         elif rsi_d <= 30:
-            rsi_alert_list.append(f"❄️ {name}({symbol}) 침체")
+            rsi_alert_list.append(f" {name}({symbol}) 침체")
 
         df_4h = yf.download(symbol, period='30d', interval='4h', progress=False)
         if df_4h.empty or len(df_4h) < 20: continue
@@ -104,10 +102,9 @@ for symbol in tickers:
 # 최종 메시지 구성이다
 msg = "📢 실시간 주식 시장 분석 보고서이다\n\n"
 msg += "✅ 현재 상승 추세인 종목이다:\n" + (", ".join(uptrend_list) if uptrend_list else "없음") + "\n\n"
-msg += "⚡ 7SMA 지지/저항 근접 구간이다:\n" + (", ".join(touch_ma7_list) if touch_ma7_list else "없음") + "\n\n"
+msg += "7SMA 지지/저항 근접 구간이다:\n" + (", ".join(touch_ma7_list) if touch_ma7_list else "없음") + "\n\n"
 msg += "🎯 20일선 지지 확인 구간이다:\n" + (", ".join(support_list) if support_list else "없음") + "\n\n"
 msg += "📊 4시간 봉 변동성 포착이다:\n" + (", ".join(bb_alert_list) if bb_alert_list else "없음") + "\n\n"
 msg += "📈 RSI 지표 과열/침체 신호이다:\n" + (", ".join(rsi_alert_list) if rsi_alert_list else "없음")
 
-# 이 부분을 send_message(msg)로 정확히 수정했다
 send_message(msg)
