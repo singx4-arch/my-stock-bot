@@ -90,10 +90,10 @@ for symbol in tickers:
 
 # 최종 메시지 구성이다
 msg = "📢 실시간 주식 시장 분석 보고서이다\n\n"
-msg += "✅ 현재 상승 추세인 종목이다:\n" + (", ".join(uptrend_list) if uptrend_list else "없음") + "\n\n"
-msg += "⚡ 7SMA 지지/저항 근접 구간이다 (1% 이내):\n" + ("\n".join(touch_ma7_list) if touch_ma7_list else "없음") + "\n\n"
-msg += "🎯 20일선 지지 확인 구간이다 (1% 이내):\n" + ("\n".join(support_list) if support_list else "없음") + "\n\n"
-msg += "📊 4시간 봉 변동성 포착이다:\n" + ("\n".join(bb_alert_list) if bb_alert_list else "없음") + "\n\n"
-msg += "📈 RSI 지표 과열/침체 신호이다:\n" + ("\n".join(rsi_alert_list) if rsi_alert_list else "없음")
+msg += "✅ 현재 상승 추세인 종목\n" + (", ".join(uptrend_list) if uptrend_list else "없음") + "\n\n"
+msg += "⚡ 7SMA 지지/저항 근접 구간 (1% 이내):\n" + ("\n".join(touch_ma7_list) if touch_ma7_list else "없음") + "\n\n"
+msg += "🎯 20일선 지지 확인 구간 (1% 이내):\n" + ("\n".join(support_list) if support_list else "없음") + "\n\n"
+msg += "📊 4시간 봉 변동성 포착 \n" + ("\n".join(bb_alert_list) if bb_alert_list else "없음") + "\n\n"
+msg += "📈 RSI 지표 과열/침체 신호 \n" + ("\n".join(rsi_alert_list) if rsi_alert_list else "없음")
 
 send_message(msg)
