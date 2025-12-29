@@ -2,7 +2,7 @@ name: Momentum Ignition Alert
 
 on:
   schedule:
-    - cron: '*/5 * * * *'  # 5분마다 아주 예민하게 감시한다이다
+    - cron: '*/5 * * * *'
   workflow_dispatch:
 
 jobs:
