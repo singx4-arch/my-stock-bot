@@ -54,17 +54,16 @@ touch_ma7_list = []
 support_list = []
 bb_alert_list = []
 rsi_alert_list = []
+recommend_list = [] # 매수 추천 종목 리스트이다
 
 for symbol in tickers:
     name = ticker_map[symbol]
     try:
-        # 일봉 데이터 분석이다
         df_d = yf.download(symbol, period='60d', interval='1d', progress=False)
         if df_d.empty or len(df_d) < 21: continue
         if isinstance(df_d.columns, pd.MultiIndex): 
             df_d.columns = df_d.columns.get_level_values(0)
         
-        # 지표 계산이다
         df_d['MA7'] = df_d['Close'].rolling(window=7).mean()
         df_d['MA20'] = df_d['Close'].rolling(window=20).mean()
         df_d['Vol_MA20'] = df_d['Volume'].rolling(window=20).mean()
@@ -79,76 +78,64 @@ for symbol in tickers:
         c_vol = float(curr['Volume'])
         a_vol = float(curr['Vol_MA20'])
         c_rsi = float(curr['RSI'])
-        
         p_ma7 = float(prev['MA7'])
         p_ma20 = float(prev['MA20'])
-        
-        # 1. 7/20 골든 크로스 확인이다
-        if p_ma7 < p_ma20 and c_ma7 > c_ma20:
-            golden_cross_list.append(f"{name}({symbol})")
-        
-        # 2. 거래량 급증 확인이다 (1.5배 이상)
-        if c_vol > a_vol * 1.5:
-            high_volume_list.append(f"{name}({symbol})")
-        
-        # 3. 7SMA 근접 확인이다
-        if abs(c_price - c_ma7) / c_ma7 <= 0.01:
-            touch_ma7_list.append(f"{name}({symbol})")
-            
-        # 4. 상승 추세 및 20일선 지지 확인이다
-        if c_price > c_ma20:
-            uptrend_list.append(f"{name}({symbol})")
-            if c_price <= c_ma20 * 1.01:
-                support_list.append(f"{name}({symbol})")
-        
-        # 5. RSI 상태 확인이다
-        if c_rsi >= 70:
-            rsi_alert_list.append(f"{name}({symbol}) 과열")
-        elif c_rsi <= 30:
-            rsi_alert_list.append(f"{name}({symbol}) 침체")
 
-        # 4시간 봉 볼린저 밴드 분석이다
+        # 조건별 판별 로직이다
+        is_gc = p_ma7 < p_ma20 and c_ma7 > c_ma20
+        is_uptrend = c_price > c_ma20
+        is_touch_ma7 = abs(c_price - c_ma7) / c_ma7 <= 0.01
+        
+        if is_gc: golden_cross_list.append(f"{name}({symbol})")
+        if c_vol > a_vol * 1.5: high_volume_list.append(f"{name}({symbol})")
+        if is_touch_ma7: touch_ma7_list.append(f"{name}({symbol})")
+        if is_uptrend:
+            uptrend_list.append(f"{name}({symbol})")
+            if c_price <= c_ma20 * 1.01: support_list.append(f"{name}({symbol})")
+        
+        if c_rsi >= 70: rsi_alert_list.append(f"{name}({symbol}) 과열")
+        elif c_rsi <= 30: rsi_alert_list.append(f"{name}({symbol}) 침체")
+
+        # 추천 로직: 골든크로스 혹은 상승추세이면서 7일선 지지를 받는 경우이다
+        if (is_gc or is_uptrend) and is_touch_ma7:
+            recommend_list.append(f"{name}({symbol})")
+
+        # 4시간 봉 분석이다
         df_4h = yf.download(symbol, period='30d', interval='4h', progress=False)
         if not df_4h.empty and len(df_4h) >= 20:
-            if isinstance(df_4h.columns, pd.MultiIndex): 
-                df_4h.columns = df_4h.columns.get_level_values(0)
+            if isinstance(df_4h.columns, pd.MultiIndex): df_4h.columns = df_4h.columns.get_level_values(0)
             df_4h['MA'] = df_4h['Close'].rolling(window=20).mean()
             df_4h['STD'] = df_4h['Close'].rolling(window=20).std()
             u_bb = df_4h['MA'] + (df_4h['STD'] * 2)
             l_bb = df_4h['MA'] - (df_4h['STD'] * 2)
             c_4h = float(df_4h['Close'].iloc[-1])
-            if c_4h > float(u_bb.iloc[-1]):
-                bb_alert_list.append(f"{name}({symbol}) 상단돌파")
-            elif c_4h < float(l_bb.iloc[-1]):
-                bb_alert_list.append(f"{name}({symbol}) 하단이탈")
+            if c_4h > float(u_bb.iloc[-1]): bb_alert_list.append(f"{name}({symbol}) 상단돌파")
+            elif c_4h < float(l_bb.iloc[-1]): bb_alert_list.append(f"{name}({symbol}) 하단이탈")
             
     except Exception as e: 
         print(f"{symbol} 분석 실패했다: {e}")
         continue
 
-# 메시지 구성이다
-msg = "📢 실시간 주식 시장 분석 보고서이다\n\n"
+# 리포트 구성이다
+report = []
+report.append("📢 실시간 주식 시장 분석 보고서이다")
+report.append("-" * 20)
+report.append("1. 7/20 골든 크로스 발생 종목이다:")
+report.append(", ".join(golden_cross_list) if golden_cross_list else "없음")
+report.append("\n2. 거래량 급증 종목이다 (평균 1.5배 이상):")
+report.append(", ".join(high_volume_list) if high_volume_list else "없음")
+report.append("\n3. 현재 상승 추세인 종목이다:")
+report.append(", ".join(uptrend_list) if uptrend_list else "없음")
+report.append("\n4. 7SMA 지지/저항 근접 구간이다:")
+report.append(", ".join(touch_ma7_list) if touch_ma7_list else "없음")
+report.append("\n5. 20일선 지지 확인 구간이다:")
+report.append(", ".join(support_list) if support_list else "없음")
+report.append("\n6. 4시간 봉 변동성 포착이다:")
+report.append(", ".join(bb_alert_list) if bb_alert_list else "없음")
+report.append("\n7. RSI 지표 과열/침체 신호이다:")
+report.append(", ".join(rsi_alert_list) if rsi_alert_list else "없음")
+report.append("-" * 20)
+report.append("💡 오늘의 매수 추천 종목이다 (추세+지지):")
+report.append(", ".join(recommend_list) if recommend_list else "없음")
 
-msg += "7/20 골든 크로스 발생 종목이다:\n"
-msg += (", ".join(golden_cross_list) if golden_cross_list else "없음") + "\n\n"
-
-msg += "거래량 급증 종목이다 (평균 1.5배 이상):\n"
-msg += (", ".join(high_volume_list) if high_volume_list else "없음") + "\n\n"
-
-msg += "현재 상승 추세인 종목이다:\n"
-msg += (", ".join(uptrend_list) if uptrend_list else "없음") + "\n\n"
-
-msg += "7SMA 지지/저항 근접 구간이다:\n"
-msg += (", ".join(touch_ma7_list) if touch_ma7_list else "없음") + "\n\n"
-
-msg += "20일선 지지 확인 구간이다:\n"
-msg += (", ".join(support_list) if support_list else "없음") + "\n\n"
-
-msg += "4시간 봉 변동성 포착이다:\n"
-msg += (", ".join(bb_alert_list) if bb_alert_list else "없음") + "\n\n"
-
-msg += "RSI 지표 과열/침체 신호이다:\n"
-msg += (", ".join(rsi_alert_list) if rsi_alert_list else "없음")
-
-# 최종 전송이다
-send_message(msg)
+send_message("\n".join(report))
