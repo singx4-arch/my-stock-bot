@@ -32,7 +32,7 @@ def calculate_rsi(data, window=14):
     rs = gain / loss
     return 100 - (100 / (1 + rs))
 
-# 종목 리스트이다 (SyntaxError 방지를 위해 형식을 맞췄다)
+# 종목 리스트이다
 ticker_map = {
     'NVDA': '엔비디아', 'TSLA': '테슬라', 'AAPL': '애플', 'MSFT': '마이크로소프트', 
     'AMZN': '아마존', 'META': '메타', 'GOOGL': '구글', 'PLTR': '팔란티어', 
@@ -46,7 +46,7 @@ ticker_map = {
 
 tickers = list(ticker_map.keys())
 
-# 결과 저장을 위한 리스트들이다
+# 결과 저장용 리스트들이다
 golden_cross_list = []
 high_volume_list = []
 uptrend_list = []
@@ -83,11 +83,11 @@ for symbol in tickers:
         p_ma7 = float(prev['MA7'])
         p_ma20 = float(prev['MA20'])
         
-        # 1. 7/20 골든 크로스이다
+        # 1. 7/20 골든 크로스 확인이다
         if p_ma7 < p_ma20 and c_ma7 > c_ma20:
             golden_cross_list.append(f"{name}({symbol})")
         
-        # 2. 거래량 급증 확인이다 (평균 1.5배 이상)
+        # 2. 거래량 급증 확인이다 (1.5배 이상)
         if c_vol > a_vol * 1.5:
             high_volume_list.append(f"{name}({symbol})")
         
@@ -101,7 +101,7 @@ for symbol in tickers:
             if c_price <= c_ma20 * 1.01:
                 support_list.append(f"{name}({symbol})")
         
-        # 5. RSI 지표이다
+        # 5. RSI 상태 확인이다
         if c_rsi >= 70:
             rsi_alert_list.append(f"{name}({symbol}) 과열")
         elif c_rsi <= 30:
@@ -123,11 +123,32 @@ for symbol in tickers:
                 bb_alert_list.append(f"{name}({symbol}) 하단이탈")
             
     except Exception as e: 
-        print(f"{symbol} 분석 중 오류 발생했다: {e}")
+        print(f"{symbol} 분석 실패했다: {e}")
         continue
 
-# 메시지 조립이다
+# 메시지 구성이다
 msg = "📢 실시간 주식 시장 분석 보고서이다\n\n"
-msg += "7/20 골든 크로스 발생 종목이다:\n" + (", ".join(golden_cross_list) if golden_cross_list else "없음") + "\n\n"
-msg += "거래량 급증 종목이다 (평균 1.5배 이상):\n" + (", ".join(high_volume_list) if high_volume_list else "없음") + "\n\n"
-msg += "현재 상승 추세인 종목이다:\n" + (", ".join(uptrend_list) if uptrend_
+
+msg += "7/20 골든 크로스 발생 종목이다:\n"
+msg += (", ".join(golden_cross_list) if golden_cross_list else "없음") + "\n\n"
+
+msg += "거래량 급증 종목이다 (평균 1.5배 이상):\n"
+msg += (", ".join(high_volume_list) if high_volume_list else "없음") + "\n\n"
+
+msg += "현재 상승 추세인 종목이다:\n"
+msg += (", ".join(uptrend_list) if uptrend_list else "없음") + "\n\n"
+
+msg += "7SMA 지지/저항 근접 구간이다:\n"
+msg += (", ".join(touch_ma7_list) if touch_ma7_list else "없음") + "\n\n"
+
+msg += "20일선 지지 확인 구간이다:\n"
+msg += (", ".join(support_list) if support_list else "없음") + "\n\n"
+
+msg += "4시간 봉 변동성 포착이다:\n"
+msg += (", ".join(bb_alert_list) if bb_alert_list else "없음") + "\n\n"
+
+msg += "RSI 지표 과열/침체 신호이다:\n"
+msg += (", ".join(rsi_alert_list) if rsi_alert_list else "없음")
+
+# 최종 전송이다
+send_message(msg)
