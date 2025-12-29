@@ -2,7 +2,7 @@ name: Dow Theory Trend Watcher
 
 on:
   schedule:
-    - cron: '0 15,22 * * *'  # 한국 시간 밤 12시와 아침 7시경 실행한다이다
+    - cron: '0 14,22 * * 1-5'  # 월요일부터 금요일까지 한국 시간 밤 11시와 아침 7시에 실행한다이다
   workflow_dispatch:
 
 jobs:
