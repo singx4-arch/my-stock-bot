@@ -113,7 +113,7 @@ for symbol in tickers:
 
 # 리포트 구성이다
 report = []
-report.append("📢 실시간 주식 분석 리포트이다")
+report.append("📢 매수와 매도는 개인의 책임입니다.")
 report.append("-" * 20)
 report.append("1. 주봉 RSI 30 부근 (대바닥권):")
 report.append(", ".join(weekly_rsi_30_list) if weekly_rsi_30_list else "없음")
