@@ -1,6 +1,5 @@
 import yfinance as yf
 import pandas as pd
-import numpy as np
 import requests
 import os
 
@@ -34,7 +33,6 @@ def calculate_rsi(data, window=14):
     return 100 - (100 / (1 + rs))
 
 def calculate_adx(df, window=14):
-    # ADX 계산 함수이다
     plus_dm = df['High'].diff()
     minus_dm = df['Low'].diff()
     plus_dm[plus_dm < 0] = 0
@@ -67,10 +65,6 @@ ticker_map = {
 
 tickers = list(ticker_map.keys())
 
-# 베타 계산을 위한 시장(QQQ) 데이터이다
-market_df = yf.download('QQQ', period='1y', interval='1d', progress=False)
-market_returns = market_df['Close'].pct_change().dropna()
-
 golden_cross_list = []
 high_volume_list = []
 uptrend_list = []
@@ -83,7 +77,7 @@ recommend_list = []
 for symbol in tickers:
     name = ticker_map[symbol]
     try:
-        # 일봉 데이터 분석이다 (베타 계산을 위해 1년치를 가져온다)
+        # 일봉 데이터 분석이다
         df_d = yf.download(symbol, period='1y', interval='1d', progress=False)
         if df_d.empty or len(df_d) < 30: continue
         if isinstance(df_d.columns, pd.MultiIndex): 
@@ -95,13 +89,6 @@ for symbol in tickers:
         df_d['Vol_MA20'] = df_d['Volume'].rolling(window=20).mean()
         df_d['RSI'] = calculate_rsi(df_d['Close'])
         df_d['ADX'] = calculate_adx(df_d)
-        
-        # 베타 계산이다
-        stock_returns = df_d['Close'].pct_change().dropna()
-        common_idx = stock_returns.index.intersection(market_returns.index)
-        cov = np.cov(stock_returns.loc[common_idx], market_returns.loc[common_idx])[0][1]
-        var = np.var(market_returns.loc[common_idx])
-        beta = cov / var
         
         curr = df_d.iloc[-1]
         prev = df_d.iloc[-2]
@@ -129,49 +116,4 @@ for symbol in tickers:
             if c_price <= c_ma20 * 1.01: support_list.append(f"{name}({symbol})")
         
         if c_rsi >= 70: rsi_alert_list.append(f"{name}({symbol}) 과열")
-        elif c_rsi <= 30: rsi_alert_list.append(f"{name}({symbol}) 침체")
-
-        # 추천 로직: (GC 혹은 상승추세) + 7일선 지지 + ADX 25 이상(강한 추세) + 베타 1.2 미만(안정성)이다
-        if (is_gc or is_uptrend) and is_touch_ma7 and c_adx >= 25 and beta < 1.2:
-            recommend_list.append(f"{name}({symbol})")
-
-        # 4시간 봉 볼린저 밴드 분석이다
-        df_4h = yf.download(symbol, period='30d', interval='4h', progress=False)
-        if not df_4h.empty and len(df_4h) >= 20:
-            if isinstance(df_4h.columns, pd.MultiIndex): 
-                df_4h.columns = df_4h.columns.get_level_values(0)
-            df_4h['MA'] = df_4h['Close'].rolling(window=20).mean()
-            df_4h['STD'] = df_4h['Close'].rolling(window=20).std()
-            u_bb = df_4h['MA'] + (df_4h['STD'] * 2)
-            l_bb = df_4h['MA'] - (df_4h['STD'] * 2)
-            c_4h = float(df_4h['Close'].iloc[-1])
-            if c_4h > float(u_bb.iloc[-1]): bb_alert_list.append(f"{name}({symbol}) 상단돌파")
-            elif c_4h < float(l_bb.iloc[-1]): bb_alert_list.append(f"{name}({symbol}) 하단이탈")
-            
-    except Exception as e: 
-        print(f"{symbol} 분석 실패했다: {e}")
-        continue
-
-# 리포트 구성이다
-report = []
-report.append("📢 실시간 주식 시장 분석 보고서이다")
-report.append("-" * 20)
-report.append("1. 7/20 골든 크로스 발생 종목이다:")
-report.append(", ".join(golden_cross_list) if golden_cross_list else "없음")
-report.append("\n2. 거래량 급증 종목이다 (평균 1.5배 이상):")
-report.append(", ".join(high_volume_list) if high_volume_list else "없음")
-report.append("\n3. 현재 상승 추세인 종목이다:")
-report.append(", ".join(uptrend_list) if uptrend_list else "없음")
-report.append("\n4. 7SMA 지지/저항 근접 구간이다:")
-report.append(", ".join(touch_ma7_list) if touch_ma7_list else "없음")
-report.append("\n5. 20일선 지지 확인 구간이다:")
-report.append(", ".join(support_list) if support_list else "없음")
-report.append("\n6. 4시간 봉 변동성 포착이다:")
-report.append(", ".join(bb_alert_list) if bb_alert_list else "없음")
-report.append("\n7. RSI 지표 과열/침체 신호이다:")
-report.append(", ".join(rsi_alert_list) if rsi_alert_list else "없음")
-report.append("-" * 20)
-report.append("💡 오늘의 매수 추천 종목이다 (추세강도+안정성):")
-report.append(", ".join(recommend_list) if recommend_list else "없음")
-
-send_message("\n".join(report))
+        elif c_rsi <= 30: rsi_alert_list.append(f"{name}({symbol}) 침체
