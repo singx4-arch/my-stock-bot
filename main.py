@@ -3,6 +3,7 @@ import pandas as pd
 import requests
 import os
 
+# 깃허브 Secrets 정보 가져오기이다
 token = os.getenv('TELEGRAM_TOKEN')
 chat_id = os.getenv('TELEGRAM_CHAT_ID')
 
@@ -31,14 +32,6 @@ def calculate_rsi(data, window=14):
     rs = gain / loss
     return 100 - (100 / (1 + rs))
 
-def calculate_macds(data, fast=12, slow=26, signal=9):
-    exp1 = data.ewm(span=fast, adjust=False).mean()
-    exp2 = data.ewm(span=slow, adjust=False).mean()
-    macd = exp1 - exp2
-    signal_line = macd.ewm(span=signal, adjust=False).mean()
-    hist = macd - signal_line
-    return macd, signal_line, hist
-
 ticker_map = {
     'NVDA': '엔비디아', 'TSLA': '테슬라', 'AAPL': '애플', 'MSFT': '마이크로소프트', 
     'AMZN': '아마존', 'META': '메타', 'GOOGL': '구글', 'PLTR': '팔란티어', 
@@ -53,9 +46,7 @@ ticker_map = {
 
 tickers = list(ticker_map.keys())
 
-rsi_30_list = []
-bull_div_list = []
-bear_div_list = []
+weekly_rsi_30_list = [] # 주봉 RSI 리스트이다
 support_smma7_list = [] 
 support_ma20_list = []  
 long_trend_list = [] 
@@ -65,45 +56,24 @@ for symbol in tickers:
     name = ticker_map[symbol]
     try:
         # 1. 일봉 분석이다
-        df_d = yf.download(symbol, period='2y', interval='1d', progress=False)
-        if df_d.empty or len(df_d) < 200: continue
+        df_d = yf.download(symbol, period='1y', interval='1d', progress=False)
+        if df_d.empty or len(df_d) < 50: continue
         if isinstance(df_d.columns, pd.MultiIndex): 
             df_d.columns = df_d.columns.get_level_values(0)
         
-        df_d['RSI'] = calculate_rsi(df_d['Close'])
         df_d['MA20'] = df_d['Close'].rolling(window=20).mean()
         df_d['SMMA7'] = df_d['Close'].ewm(alpha=1/7, adjust=False).mean()
-        macd, signal, hist = calculate_macds(df_d['Close'])
-        df_d['MACD_Hist'] = hist
-
+        
         curr = df_d.iloc[-1]
         c_price = float(curr['Close'])
-        c_rsi = float(curr['RSI'])
         c_ma20 = float(curr['MA20'])
         c_smma7 = float(curr['SMMA7'])
 
-        if 28 <= c_rsi <= 33:
-            rsi_30_list.append(f"{name}({symbol})")
-
-        lookback = df_d.iloc[-25:-2]
-        low_price_idx = lookback['Low'].idxmin()
-        prev_low_price = float(lookback.loc[low_price_idx, 'Low'])
-        prev_low_rsi = float(lookback.loc[low_price_idx, 'RSI'])
-        if float(curr['Low']) < prev_low_price and c_rsi > prev_low_rsi and c_rsi < 45:
-            bull_div_list.append(f"{name}({symbol})")
-
-        high_price_idx = lookback['High'].idxmax()
-        prev_high_price = float(lookback.loc[high_price_idx, 'High'])
-        prev_high_rsi = float(lookback.loc[high_price_idx, 'RSI'])
-        if float(curr['High']) > prev_high_price and c_rsi < prev_high_rsi and c_rsi > 55:
-            bear_div_list.append(f"{name}({symbol})")
-
-        # 7SMMA 지지 로직이다
+        # 일봉 지지 로직이다
         is_near_smma7 = abs(c_price - c_smma7) / c_smma7 <= 0.01
         if is_near_smma7 and c_price >= c_smma7:
             support_smma7_list.append(f"{name}({symbol})")
 
-        # 20일선 지지 로직이다
         is_near_ma20 = abs(c_price - c_ma20) / c_ma20 <= 0.01
         if c_price < c_smma7 and is_near_ma20 and c_price >= c_ma20:
             support_ma20_list.append(f"{name}({symbol})")
@@ -113,12 +83,23 @@ for symbol in tickers:
         if not df_w.empty and len(df_w) >= 21:
             if isinstance(df_w.columns, pd.MultiIndex): 
                 df_w.columns = df_w.columns.get_level_values(0)
+            
+            # 주봉 RSI 계산이다
+            df_w['WRSI'] = calculate_rsi(df_w['Close'])
             df_w['WSMMA7'] = df_w['Close'].ewm(alpha=1/7, adjust=False).mean()
             df_w['WMA20'] = df_w['Close'].rolling(window=20).mean()
+            
             w_curr = df_w.iloc[-1]
+            w_c_rsi = float(w_curr['WRSI'])
             w_c_price = float(w_curr['Close'])
             w_c_smma7 = float(w_curr['WSMMA7'])
             w_c_ma20 = float(w_curr['WMA20'])
+
+            # 주봉 RSI 30 부근 감지이다
+            if 28 <= w_c_rsi <= 35:
+                weekly_rsi_30_list.append(f"{name}({symbol})")
+
+            # 장기 추세 확인이다
             if w_c_price > w_c_smma7 and w_c_price > w_c_ma20:
                 long_trend_list.append(f"{name}({symbol})")
 
@@ -134,21 +115,16 @@ for symbol in tickers:
 report = []
 report.append("📢 실시간 주식 분석 리포트이다")
 report.append("-" * 20)
-report.append("1. RSI 30 부근 (바닥권):")
-report.append(", ".join(rsi_30_list) if rsi_30_list else "없음")
-report.append("\n2. 상승 다이버전스 (반등 신호):")
-report.append(", ".join(bull_div_list) if bull_div_list else "없음")
-report.append("\n3. 하락 다이버전스 (하락 신호):")
-report.append(", ".join(bear_div_list) if bear_div_list else "없음")
-report.append("\n4. 7SMMA 지지 (이평선 위):")
+report.append("1. 주봉 RSI 30 부근 (대바닥권):")
+report.append(", ".join(weekly_rsi_30_list) if weekly_rsi_30_list else "없음")
+report.append("\n2. 일봉 7SMMA 지지 (강한 추세):")
 report.append(", ".join(support_smma7_list) if support_smma7_list else "없음")
-report.append("\n5. 20일선 지지 (7SMMA 하회 시):")
-# 아래 줄이 오류가 났던 149번 라인 수정본이다
+report.append("\n3. 일봉 20일선 지지 (눌림목):")
 report.append(", ".join(support_ma20_list) if support_ma20_list else "없음")
-report.append("\n6. 장기 상승 추세 종목:")
+report.append("\n4. 장기 상승 추세 종목 (주봉 정배열):")
 report.append(", ".join(long_trend_list) if long_trend_list else "없음")
 report.append("-" * 20)
-report.append("💡 오늘의 매수 추천 종목 (20MA 위 + 골든크로스):")
+report.append("💡 오늘의 매수 추천 종목:")
 report.append(", ".join(recommend_list) if recommend_list else "없음")
 
 send_message("\n".join(report))
