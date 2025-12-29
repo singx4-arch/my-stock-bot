@@ -2,7 +2,7 @@ name: Stock Check Bot
 
 on:
   schedule:
-    - cron: '*/30 * * * *'  # 매 정각마다 실행
+    - cron: '*/5 * * * *'  # 5분마다 실행되도록 설정했다
   workflow_dispatch:
 
 jobs:
