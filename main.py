@@ -46,10 +46,10 @@ ticker_map = {
 
 tickers = list(ticker_map.keys())
 
-weekly_rsi_30_list = [] # 주봉 RSI 리스트이다
+weekly_rsi_30_list = [] 
 support_smma7_list = [] 
 support_ma20_list = []  
-long_trend_list = [] 
+trend_reversal_list = [] # 장기 상승 추세 전환 리스트이다
 recommend_list = []
 
 for symbol in tickers:
@@ -78,30 +78,32 @@ for symbol in tickers:
         if c_price < c_smma7 and is_near_ma20 and c_price >= c_ma20:
             support_ma20_list.append(f"{name}({symbol})")
 
-        # 2. 주봉 분석이다
+        # 2. 주봉 분석 (추세 전환 확인)이다
         df_w = yf.download(symbol, period='2y', interval='1wk', progress=False)
-        if not df_w.empty and len(df_w) >= 21:
+        if not df_w.empty and len(df_w) >= 25:
             if isinstance(df_w.columns, pd.MultiIndex): 
                 df_w.columns = df_w.columns.get_level_values(0)
             
-            # 주봉 RSI 계산이다
             df_w['WRSI'] = calculate_rsi(df_w['Close'])
             df_w['WSMMA7'] = df_w['Close'].ewm(alpha=1/7, adjust=False).mean()
             df_w['WMA20'] = df_w['Close'].rolling(window=20).mean()
             
             w_curr = df_w.iloc[-1]
-            w_c_rsi = float(w_curr['WRSI'])
-            w_c_price = float(w_curr['Close'])
-            w_c_smma7 = float(w_curr['WSMMA7'])
+            w_prev = df_w.iloc[-2] # 지난주 데이터이다
+
+            # 주봉 골든크로스 판독 (7SMMA가 20MA를 상향 돌파)이다
+            w_c_smma = float(w_curr['WSMMA7'])
             w_c_ma20 = float(w_curr['WMA20'])
+            w_p_smma = float(w_prev['WSMMA7'])
+            w_p_ma20 = float(w_prev['WMA20'])
+
+            # 이번주에는 위에 있고, 지난주에는 아래에 있었다면 골든크로스이다
+            if w_c_smma > w_c_ma20 and w_p_smma <= w_p_ma20:
+                trend_reversal_list.append(f"{name}({symbol})")
 
             # 주봉 RSI 30 부근 감지이다
-            if 28 <= w_c_rsi <= 35:
+            if 28 <= float(w_curr['WRSI']) <= 35:
                 weekly_rsi_30_list.append(f"{name}({symbol})")
-
-            # 장기 추세 확인이다
-            if w_c_price > w_c_smma7 and w_c_price > w_c_ma20:
-                long_trend_list.append(f"{name}({symbol})")
 
         # 3. 매수 추천 로직이다
         if c_price > c_ma20 and c_smma7 > c_ma20:
@@ -121,8 +123,8 @@ report.append("\n2. 일봉 7SMMA에 근접!! (강한 추세):")
 report.append(", ".join(support_smma7_list) if support_smma7_list else "없음")
 report.append("\n3. 일봉 20일선에 근접!! (눌림목):")
 report.append(", ".join(support_ma20_list) if support_ma20_list else "없음")
-report.append("\n4. 장기 상승 추세 종목 (주봉 정배열):")
-report.append(", ".join(long_trend_list) if long_trend_list else "없음")
+report.append("\n4. 장기 상승 추세 전환 종목 (주봉 골든크로스):")
+report.append(", ".join(trend_reversal_list) if trend_reversal_list else "없음")
 report.append("-" * 20)
 report.append("💡 오늘의 매수 추천 종목:")
 report.append(", ".join(recommend_list) if recommend_list else "없음")
