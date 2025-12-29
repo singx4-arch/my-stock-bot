@@ -13,15 +13,15 @@ def send_message(text):
     requests.get(url, params=params)
 
 ticker_map = {
-    'NVDA': '엔비디아', 'TSLA': '테슬라', 'AAPL': '애플', 'MSFT': '마이크로소프트', 
+    'NVDA': '엔비디아', 'TSLA': '테슬라', 'AAPL': '애플', 
     'AMZN': '아마존', 'META': '메타', 'GOOGL': '구글', 'PLTR': '팔란티어', 
-    'MSTR': '마이크로스트래티지', 'COIN': '코인베이스', 'AMD': 'AMD', 'NFLX': '넷플릭스', 
+    'COIN': '코인베이스', 'AMD': 'AMD', 'NFLX': '넷플릭스', 
     'AVGO': '브로드컴', 'TQQQ': '나스닥3배레버', 'SOXL': '반도체3배레버', 'ARM': 'ARM', 
-    'TSM': 'TSMC', 'MU': '마이크론', 'INTC': '인텔', 'SMCI': '슈퍼마이크로', 
-    'PYPL': '페이팔', 'SQQQ': '나스닥3배인버스', 'SOXS': '반도체3배인버스', 'PANW': '팔로알토', 
+    'TSM': 'TSMC', 'MU': '마이크론', 'SMCI': '슈퍼마이크로', 
+    'PYPL': '페이팔', 'PANW': '팔로알토', 
     'COST': '코스트코', 'QCOM': '퀄컴', 'ASML': 'ASML', 'SNOW': '스노우플레이크', 
     'MARA': '마라톤디지털', 'RIOT': '라이엇플랫폼', 'VRT': '버티브 홀딩스', 
-    'ANET': '아리스타 네트웍스', 'LLY': '일라이 릴리', 'NVO': '노보 노디스크'
+    'ANET': '아리스타 네트웍스', 'LLY': '일라이 릴리'
 }
 
 ignition_alarms = []
