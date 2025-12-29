@@ -48,5 +48,5 @@ if ignition_alarms:
     msg = "⚠️ [긴급] 급등 전조 현상 포착이다\n" + "-" * 20 + "\n" + "\n\n".join(ignition_alarms)
     send_message(msg)
 else:
-    # 테스트를 위해 아래 한 줄을 임시로 추가해본다이다
-    send_message("✅ 봇이 정상적으로 시장을 감시 중이다. 현재 조건에 맞는 급등 종목은 없다이다.")
+    # 테스트를 위해 아래 한 줄을 임시로 추가
+    send_message("✅ 봇이 정상적으로 시장을 감시 중이다. 현재 조건에 맞는 급등 종목은 없다.")
