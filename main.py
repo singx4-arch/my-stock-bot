@@ -24,17 +24,17 @@ def calculate_rsi(data, window=14):
     rs = gain / loss
     return 100 - (100 / (1 + rs))
 
-# 감시 종목 리스트 30개이다
+# 감시 종목 리스트이다
 tickers = [
     'MSFT', 'GOOGL', 'META', 'AMZN', 'PLTR', 'SNOW', 'ORCL', 'CRM', 'AAPL', 'MSTR',
     'NVDA', 'AMD', 'AVGO', 'ARM', 'TSM', 'ASML', 'QCOM', 'INTC', 'MU', 'AMAT',
     'KLAC', 'LRCX', 'SMCI', 'ADI', 'TXN', 'TSLA', 'TQQQ', 'SOXL', 'COIN', 'MDB'
 ]
 
-above_ma20_list = []
-touch_ma20_list = []
-bb_alert_list = []
-rsi_alert_list = []
+uptrend_list = []      # 상승 추세 종목 리스트이다
+support_list = []      # 지지 구간 종목 리스트이다
+bb_alert_list = []     # 볼린저 밴드 신호 리스트이다
+rsi_alert_list = []    # RSI 신호 리스트이다
 
 for symbol in tickers:
     try:
@@ -49,17 +49,17 @@ for symbol in tickers:
         curr_d = float(df_d['Close'].iloc[-1])
         rsi_d = float(df_d['RSI'].iloc[-1])
         
-        # 20일선 조건 확인이다
+        # 상승 추세 및 지지 확인이다
         if curr_d > ma20_d:
-            above_ma20_list.append(symbol)
+            uptrend_list.append(symbol)
             if curr_d <= ma20_d * 1.01:
-                touch_ma20_list.append(f"🎯 {symbol} (가격: {curr_d:.2f} / RSI: {rsi_d:.1f})")
+                support_list.append(f"🎯 {symbol} (현재가: {curr_d:.2f} / RSI: {rsi_d:.1f})")
         
         # RSI 과열/침체 확인이다
         if rsi_d >= 70:
-            rsi_alert_list.append(f"🔥 {symbol} 과매수 (RSI: {rsi_d:.1f})")
+            rsi_alert_list.append(f"🔥 {symbol} 과열 (RSI: {rsi_d:.1f})")
         elif rsi_d <= 30:
-            rsi_alert_list.append(f"❄️ {symbol} 과매도 (RSI: {rsi_d:.1f})")
+            rsi_alert_list.append(f"❄️ {symbol} 침체 (RSI: {rsi_d:.1f})")
 
         # 2. 4시간 봉 볼린저 밴드 분석이다
         df_4h = yf.download(symbol, period='30d', interval='4h', progress=False)
@@ -73,17 +73,17 @@ for symbol in tickers:
         
         curr_4h = float(df_4h['Close'].iloc[-1])
         if curr_4h > float(upper_bb.iloc[-1]):
-            bb_alert_list.append(f"🚀 {symbol} (밴드상단돌파)")
+            bb_alert_list.append(f"🚀 {symbol} (밴드 상단 돌파했다)")
         elif curr_4h < float(lower_bb.iloc[-1]):
-            bb_alert_list.append(f"⚠️ {symbol} (밴드하단이탈)")
+            bb_alert_list.append(f"⚠️ {symbol} (밴드 하단 이탈했다)")
             
     except: continue
 
-# 메시지 구성이다
-msg = "🔔 종합 주식 분석 보고서이다\n\n"
-msg += "✅ 일봉 20일선 위:\n" + (", ".join(above_ma20_list) if above_ma20_list else "없음") + "\n\n"
-msg += "🎯 20일선 지지/터치 (1% 근접):\n" + ("\n".join(touch_ma20_list) if touch_ma20_list else "없음") + "\n\n"
-msg += "📊 4H 볼린저 밴드 신호:\n" + ("\n".join(bb_alert_list) if bb_alert_list else "없음") + "\n\n"
-msg += "📈 RSI 과열/침체 신호:\n" + ("\n".join(rsi_alert_list) if rsi_alert_list else "없음")
+# 최종 메시지 구성이다
+msg = "📢 실시간 주식 시장 분석 보고서이다\n\n"
+msg += "✅ 현재 상승 추세인 종목이다:\n" + (", ".join(uptrend_list) if uptrend_list else "없음") + "\n\n"
+msg += "🎯 20일선 지지 확인 구간이다 (1% 이내):\n" + ("\n".join(support_list) if support_list else "없음") + "\n\n"
+msg += "📊 4시간 봉 변동성 포착이다:\n" + ("\n".join(bb_alert_list) if bb_alert_list else "없음") + "\n\n"
+msg += "📈 RSI 지표 과열/침체 신호이다:\n" + ("\n".join(rsi_alert_list) if rsi_alert_list else "없음")
 
 send_message(msg)
