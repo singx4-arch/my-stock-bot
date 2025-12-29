@@ -101,12 +101,12 @@ for symbol in tickers:
         # 7SMMA 지지 로직이다
         is_near_smma7 = abs(c_price - c_smma7) / c_smma7 <= 0.01
         if is_near_smma7 and c_price >= c_smma7:
-            support_smma7_list.append(f"{name}({symbol}) (매수기회가 왔습니다!!)")
+            support_smma7_list.append(f"{name}({symbol})")
 
         # 20일선 지지 로직이다
         is_near_ma20 = abs(c_price - c_ma20) / c_ma20 <= 0.01
         if c_price < c_smma7 and is_near_ma20 and c_price >= c_ma20:
-            support_ma20_list.append(f"{name}({symbol}) (매수기회가 왔습니다!!)")
+            support_ma20_list.append(f"{name}({symbol})")
 
         # 2. 주봉 분석이다
         df_w = yf.download(symbol, period='2y', interval='1wk', progress=False)
