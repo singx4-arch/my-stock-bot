@@ -31,10 +31,11 @@ tickers = [
     'KLAC', 'LRCX', 'SMCI', 'ADI', 'TXN', 'TSLA', 'TQQQ', 'SOXL', 'COIN', 'MDB'
 ]
 
-uptrend_list = []      # 상승 추세 종목 리스트이다
-support_list = []      # 지지 구간 종목 리스트이다
-bb_alert_list = []     # 볼린저 밴드 신호 리스트이다
-rsi_alert_list = []    # RSI 신호 리스트이다
+uptrend_list = []      # 상승 추세 리스트이다
+support_list = []      # 20일선 지지 리스트이다
+touch_ma7_list = []    # 7SMA 근접 리스트이다 (신규)
+bb_alert_list = []     # 볼린저 밴드 리스트이다
+rsi_alert_list = []    # RSI 리스트이다
 
 for symbol in tickers:
     try:
@@ -43,13 +44,21 @@ for symbol in tickers:
         if df_d.empty or len(df_d) < 20: continue
         if isinstance(df_d.columns, pd.MultiIndex): df_d.columns = df_d.columns.get_level_values(0)
         
-        # RSI와 20일선 계산이다
+        # 지표 계산이다 (7일선, 20일선, RSI)
+        df_d['MA7'] = df_d['Close'].rolling(window=7).mean()
+        df_d['MA20'] = df_d['Close'].rolling(window=20).mean()
         df_d['RSI'] = calculate_rsi(df_d['Close'])
-        ma20_d = df_d['Close'].rolling(window=20).mean().iloc[-1]
+        
         curr_d = float(df_d['Close'].iloc[-1])
+        ma7_d = float(df_d['MA7'].iloc[-1])
+        ma20_d = float(df_d['MA20'].iloc[-1])
         rsi_d = float(df_d['RSI'].iloc[-1])
         
-        # 상승 추세 및 지지 확인이다
+        # 7SMA 근접 확인이다 (현재가와 7일선 차이가 1% 이내인 경우)
+        if abs(curr_d - ma7_d) / ma7_d <= 0.01:
+            touch_ma7_list.append(f"⚡ {symbol} (현재가: {curr_d:.2f} / 7SMA: {ma7_d:.2f})")
+            
+        # 상승 추세 및 20일선 지지 확인이다
         if curr_d > ma20_d:
             uptrend_list.append(symbol)
             if curr_d <= ma20_d * 1.01:
@@ -82,6 +91,7 @@ for symbol in tickers:
 # 최종 메시지 구성이다
 msg = "📢 실시간 주식 시장 분석 보고서이다\n\n"
 msg += "✅ 현재 상승 추세인 종목이다:\n" + (", ".join(uptrend_list) if uptrend_list else "없음") + "\n\n"
+msg += "⚡ 7SMA 지지/저항 근접 구간이다 (1% 이내):\n" + ("\n".join(touch_ma7_list) if touch_ma7_list else "없음") + "\n\n"
 msg += "🎯 20일선 지지 확인 구간이다 (1% 이내):\n" + ("\n".join(support_list) if support_list else "없음") + "\n\n"
 msg += "📊 4시간 봉 변동성 포착이다:\n" + ("\n".join(bb_alert_list) if bb_alert_list else "없음") + "\n\n"
 msg += "📈 RSI 지표 과열/침체 신호이다:\n" + ("\n".join(rsi_alert_list) if rsi_alert_list else "없음")
