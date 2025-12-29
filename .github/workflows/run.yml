@@ -2,7 +2,7 @@ name: Stock Check Bot
 
 on:
   schedule:
-    - cron: '*/29 * * * *'  # 29분마다 실행되도록 설정했다
+    - cron: '0 * * * *'  # 29분마다 실행되도록 설정했다
   workflow_dispatch:
 
 jobs:
