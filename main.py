@@ -68,6 +68,7 @@ tickers = list(ticker_map.keys())
 golden_cross_list = []
 high_volume_list = []
 uptrend_list = []
+long_trend_list = [] # 장기 추세 리스트 추가이다
 touch_ma7_list = []
 support_list = []
 bb_alert_list = []
@@ -77,6 +78,7 @@ recommend_list = []
 for symbol in tickers:
     name = ticker_map[symbol]
     try:
+        # 1. 일봉 데이터 분석 (단기 추세) 이다
         df_d = yf.download(symbol, period='1y', interval='1d', progress=False)
         if df_d.empty or len(df_d) < 30: continue
         if isinstance(df_d.columns, pd.MultiIndex): 
@@ -119,6 +121,24 @@ for symbol in tickers:
         if (is_gc or is_uptrend) and is_touch_ma7 and c_adx >= 25:
             recommend_list.append(f"{name}({symbol})")
 
+        # 2. 주봉 데이터 분석 (장기 추세) 이다
+        df_w = yf.download(symbol, period='2y', interval='1wk', progress=False)
+        if not df_w.empty and len(df_w) >= 20:
+            if isinstance(df_w.columns, pd.MultiIndex): 
+                df_w.columns = df_w.columns.get_level_values(0)
+            
+            # 주봉 20일 이평선 및 7 SMMA 계산이다
+            df_w['WMA20'] = df_w['Close'].rolling(window=20).mean()
+            df_w['SMMA7'] = df_w['Close'].ewm(alpha=1/7, adjust=False).mean()
+            
+            w_curr_price = float(df_w['Close'].iloc[-1])
+            w_ma20 = float(df_w['WMA20'].iloc[-1])
+            w_smma7 = float(df_w['SMMA7'].iloc[-1])
+            
+            if w_curr_price > w_ma20 and w_curr_price > w_smma7:
+                long_trend_list.append(f"{name}({symbol})")
+
+        # 3. 4시간 봉 분석 이다
         df_4h = yf.download(symbol, period='30d', interval='4h', progress=False)
         if not df_4h.empty and len(df_4h) >= 20:
             if isinstance(df_4h.columns, pd.MultiIndex): 
@@ -135,6 +155,7 @@ for symbol in tickers:
         print(f"{symbol} 분석 실패했다: {e}")
         continue
 
+# 리포트 구성이다
 report = []
 report.append("📢 실시간 주식 시장 분석 보고서이다")
 report.append("-" * 20)
@@ -142,7 +163,7 @@ report.append("1. 7일/20일 이평선 골든 크로스 발생 종목이다:")
 report.append(", ".join(golden_cross_list) if golden_cross_list else "없음")
 report.append("\n2. 거래량 급증 종목이다 (평균 1.5배 이상):")
 report.append(", ".join(high_volume_list) if high_volume_list else "없음")
-report.append("\n3. 현재 상승 추세인 종목이다:")
+report.append("\n3. 단기 상승 추세인 종목이다 (일봉 20MA 상회):") # 문구 수정이다
 report.append(", ".join(uptrend_list) if uptrend_list else "없음")
 report.append("\n4. 7SMA 지지/저항 근접 구간이다:")
 report.append(", ".join(touch_ma7_list) if touch_ma7_list else "없음")
@@ -152,8 +173,11 @@ report.append("\n6. 4시간 봉 변동성 포착이다:")
 report.append(", ".join(bb_alert_list) if bb_alert_list else "없음")
 report.append("\n7. RSI 지표 과열/침체 신호이다:")
 report.append(", ".join(rsi_alert_list) if rsi_alert_list else "없음")
+report.append("\n8. 장기 상승 추세 종목이다:") # 섹션 추가이다
+report.append(", ".join(long_trend_list) if long_trend_list else "없음")
 report.append("-" * 20)
 report.append("💡 오늘의 매수 추천 종목이다 (추세 강도 중심):")
 report.append(", ".join(recommend_list) if recommend_list else "없음")
+report.append("\n주봉으로 20일 이동평균선과 7smma 위에 있는 종목들만 장기 상승 추세입니다.") # 요청 문구 추가이다
 
 send_message("\n".join(report))
