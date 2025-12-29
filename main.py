@@ -56,8 +56,8 @@ tickers = list(ticker_map.keys())
 rsi_30_list = []
 bull_div_list = []
 bear_div_list = []
-support_smma7_list = []
-resistance_smma7_list = []
+support_smma7_list = [] # 7SMMA 지지 종목들이다
+support_ma20_list = []  # 20일선 지지 종목들이다
 long_trend_list = [] 
 recommend_list = []
 
@@ -72,18 +72,18 @@ for symbol in tickers:
         
         df_d['RSI'] = calculate_rsi(df_d['Close'])
         df_d['MA200'] = df_d['Close'].rolling(window=200).mean()
+        df_d['MA20'] = df_d['Close'].rolling(window=20).mean()
         df_d['SMMA7'] = df_d['Close'].ewm(alpha=1/7, adjust=False).mean()
         macd, signal, hist = calculate_macds(df_d['Close'])
         df_d['MACD_Hist'] = hist
 
         curr = df_d.iloc[-1]
-        prev = df_d.iloc[-2]
         c_price = float(curr['Close'])
         c_rsi = float(curr['RSI'])
         c_ma200 = float(curr['MA200'])
+        c_ma20 = float(curr['MA20'])
         c_smma7 = float(curr['SMMA7'])
         c_macd_h = float(curr['MACD_Hist'])
-        p_macd_h = float(prev['MACD_Hist'])
 
         if 28 <= c_rsi <= 33:
             rsi_30_list.append(f"{name}({symbol})")
@@ -98,57 +98,4 @@ for symbol in tickers:
         high_price_idx = lookback['High'].idxmax()
         prev_high_price = float(lookback.loc[high_price_idx, 'High'])
         prev_high_rsi = float(lookback.loc[high_price_idx, 'RSI'])
-        if float(curr['High']) > prev_high_price and c_rsi < prev_high_rsi and c_rsi > 55:
-            bear_div_list.append(f"{name}({symbol})")
-
-        is_near_smma7 = abs(c_price - c_smma7) / c_smma7 <= 0.01
-        if is_near_smma7:
-            if c_price >= c_smma7: support_smma7_list.append(f"{name}({symbol})")
-            else: resistance_smma7_list.append(f"{name}({symbol})")
-
-        # 2. 주봉 분석이다
-        df_w = yf.download(symbol, period='2y', interval='1wk', progress=False)
-        if not df_w.empty and len(df_w) >= 21:
-            if isinstance(df_w.columns, pd.MultiIndex): 
-                df_w.columns = df_w.columns.get_level_values(0)
-            df_w['WSMMA7'] = df_w['Close'].ewm(alpha=1/7, adjust=False).mean()
-            df_w['WMA20'] = df_w['Close'].rolling(window=20).mean()
-            w_curr = df_w.iloc[-1]
-            w_prev = df_w.iloc[-2]
-            w_c_price = float(w_curr['Close'])
-            w_c_smma7 = float(w_curr['WSMMA7'])
-            w_c_ma20 = float(w_curr['WMA20'])
-            is_w_gc = float(w_prev['WSMMA7']) < float(w_prev['WMA20']) and w_c_smma7 > w_c_ma20
-            is_above_ma = w_c_price > w_c_smma7 and w_c_price > w_c_ma20
-            if is_w_gc or is_above_ma:
-                long_trend_list.append(f"{name}({symbol})")
-
-        # 3. 매수 추천 로직이다
-        is_long_term_uptrend = c_price > c_ma200
-        is_macd_reversal = p_macd_h < 0 and c_macd_h > p_macd_h
-        if is_long_term_uptrend and (c_rsi < 40 or any(symbol in d for d in bull_div_list)) and is_macd_reversal:
-            recommend_list.append(f"{name}({symbol})")
-
-    except Exception as e:
-        print(f"{symbol} 분석 중 오류이다: {e}")
-        continue
-
-report = []
-report.append("📢 실시간 주식 분석 리포트이다")
-report.append("-" * 20)
-report.append("1. RSI 30 부근 (바닥권):")
-report.append(", ".join(rsi_30_list) if rsi_30_list else "없음")
-report.append("\n2. 상승 다이버전스 (반등 신호):")
-report.append(", ".join(bull_div_list) if bull_div_list else "없음")
-report.append("\n3. 하락 다이버전스 (하락 신호):")
-report.append(", ".join(bear_div_list) if bear_div_list else "없음")
-report.append("\n4. 7SMMA 지지/저항:")
-report.append(f"\n지지(롱)\n {', '.join(support_smma7_list) if support_smma7_list else '없음'}")
-report.append(f"\n저항(숏)\n {', '.join(resistance_smma7_list) if resistance_smma7_list else '없음'}")
-report.append("\n5. 장기 상승 추세 종목:")
-report.append(", ".join(long_trend_list) if long_trend_list else "없음")
-report.append("-" * 20)
-report.append("💡 오늘의 매수 추천 종목:")
-report.append(", ".join(recommend_list) if recommend_list else "없음")
-
-send_message("\n".join(report))
+        if float(curr['High']) > prev_high_
