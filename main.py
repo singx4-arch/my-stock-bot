@@ -51,43 +51,17 @@ def calculate_adx(df, window=14):
     adx = dx.rolling(window).mean()
     return adx
 
-# 종목 리스트이다
 # 업데이트된 종목 리스트이다
 ticker_map = {
-    'NVDA': '엔비디아', 
-    'TSLA': '테슬라', 
-    'AAPL': '애플', 
-    'MSFT': '마이크로소프트', 
-    'AMZN': '아마존', 
-    'META': '메타', 
-    'GOOGL': '구글', 
-    'PLTR': '팔란티어', 
-    'MSTR': '마이크로스트래티지', 
-    'COIN': '코인베이스', 
-    'AMD': 'AMD', 
-    'NFLX': '넷플릭스', 
-    'AVGO': '브로드컴', 
-    'TQQQ': '나스닥3배레버', 
-    'SOXL': '반도체3배레버', 
-    'ARM': 'ARM', 
-    'TSM': 'TSMC', 
-    'MU': '마이크론', 
-    'INTC': '인텔', 
-    'SMCI': '슈퍼마이크로', 
-    'PYPL': '페이팔', 
-    'SQQQ': '나스닥3배인버스', 
-    'SOXS': '반도체3배인버스', 
-    'PANW': '팔로알토', 
-    'COST': '코스트코', 
-    'QCOM': '퀄컴', 
-    'ASML': 'ASML', 
-    'SNOW': '스노우플레이크', 
-    'MARA': '마라톤디지털', 
-    'RIOT': '라이엇플랫폼',
-    'VRT': '버티브 홀딩스', 
-    'ANET': '아리스타 네트웍스', 
-    'LLY': '일라이 릴리', 
-    'NVO': '노보 노디스크'
+    'NVDA': '엔비디아', 'TSLA': '테슬라', 'AAPL': '애플', 'MSFT': '마이크로소프트', 
+    'AMZN': '아마존', 'META': '메타', 'GOOGL': '구글', 'PLTR': '팔란티어', 
+    'MSTR': '마이크로스트래티지', 'COIN': '코인베이스', 'AMD': 'AMD', 'NFLX': '넷플릭스', 
+    'AVGO': '브로드컴', 'TQQQ': '나스닥3배레버', 'SOXL': '반도체3배레버', 'ARM': 'ARM', 
+    'TSM': 'TSMC', 'MU': '마이크론', 'INTC': '인텔', 'SMCI': '슈퍼마이크로', 
+    'PYPL': '페이팔', 'SQQQ': '나스닥3배인버스', 'SOXS': '반도체3배인버스', 'PANW': '팔로알토', 
+    'COST': '코스트코', 'QCOM': '퀄컴', 'ASML': 'ASML', 'SNOW': '스노우플레이크', 
+    'MARA': '마라톤디지털', 'RIOT': '라이엇플랫폼', 'VRT': '버티브 홀딩스', 
+    'ANET': '아리스타 네트웍스', 'LLY': '일라이 릴리', 'NVO': '노보 노디스크'
 }
 
 tickers = list(ticker_map.keys())
@@ -96,7 +70,8 @@ golden_cross_list = []
 high_volume_list = []
 uptrend_list = []
 long_trend_list = [] 
-touch_ma7_list = []
+support_smma7_list = [] # 지지 구간 리스트이다
+resistance_smma7_list = [] # 저항 구간 리스트이다
 support_list = []
 bb_alert_list = []
 rsi_alert_list = []
@@ -105,13 +80,11 @@ recommend_list = []
 for symbol in tickers:
     name = ticker_map[symbol]
     try:
-        # 1. 일봉 데이터 분석이다
         df_d = yf.download(symbol, period='1y', interval='1d', progress=False)
         if df_d.empty or len(df_d) < 30: continue
         if isinstance(df_d.columns, pd.MultiIndex): 
             df_d.columns = df_d.columns.get_level_values(0)
         
-        # 일봉 7SMMA 및 20MA 계산이다
         df_d['SMMA7'] = df_d['Close'].ewm(alpha=1/7, adjust=False).mean()
         df_d['MA20'] = df_d['Close'].rolling(window=20).mean()
         df_d['Vol_MA20'] = df_d['Volume'].rolling(window=20).mean()
@@ -132,14 +105,19 @@ for symbol in tickers:
         p_smma7 = float(prev['SMMA7'])
         p_ma20 = float(prev['MA20'])
 
-        # 일봉 골든 크로스 (7SMMA가 20MA 돌파) 및 추세 확인이다
         is_gc = p_smma7 < p_ma20 and c_smma7 > c_ma20
         is_uptrend = c_price > c_ma20
-        is_touch_ma7 = abs(c_price - c_smma7) / c_smma7 <= 0.01
+        
+        # 7SMMA 지지 및 저항 로직 분리이다
+        is_near_smma7 = abs(c_price - c_smma7) / c_smma7 <= 0.01
+        if is_near_smma7:
+            if c_price >= c_smma7:
+                support_smma7_list.append(f"{name}({symbol})")
+            else:
+                resistance_smma7_list.append(f"{name}({symbol})")
         
         if is_gc: golden_cross_list.append(f"{name}({symbol})")
         if c_vol > a_vol * 1.5: high_volume_list.append(f"{name}({symbol})")
-        if is_touch_ma7: touch_ma7_list.append(f"{name}({symbol})")
         if is_uptrend:
             uptrend_list.append(f"{name}({symbol})")
             if c_price <= c_ma20 * 1.01: support_list.append(f"{name}({symbol})")
@@ -147,36 +125,27 @@ for symbol in tickers:
         if c_rsi >= 70: rsi_alert_list.append(f"{name}({symbol}) 과열")
         elif c_rsi <= 30: rsi_alert_list.append(f"{name}({symbol}) 침체")
 
-        if (is_gc or is_uptrend) and is_touch_ma7 and c_adx >= 25:
+        if (is_gc or is_uptrend) and is_near_smma7 and c_adx >= 25:
             recommend_list.append(f"{name}({symbol})")
 
-        # 2. 주봉 데이터 분석이다 (장기 추세)
         df_w = yf.download(symbol, period='2y', interval='1wk', progress=False)
         if not df_w.empty and len(df_w) >= 21:
             if isinstance(df_w.columns, pd.MultiIndex): 
                 df_w.columns = df_w.columns.get_level_values(0)
-            
-            # 주봉 7SMMA 및 20MA 계산이다
             df_w['WSMMA7'] = df_w['Close'].ewm(alpha=1/7, adjust=False).mean()
             df_w['WMA20'] = df_w['Close'].rolling(window=20).mean()
-            
             w_curr = df_w.iloc[-1]
             w_prev = df_w.iloc[-2]
-            
             w_c_price = float(w_curr['Close'])
             w_c_smma7 = float(w_curr['WSMMA7'])
             w_c_ma20 = float(w_curr['WMA20'])
             w_p_smma7 = float(w_prev['WSMMA7'])
             w_p_ma20 = float(w_prev['WMA20'])
-            
-            # 주봉 골든 크로스 확인 및 가격 위치 조건이다
             is_w_gc = w_p_smma7 < w_p_ma20 and w_c_smma7 > w_c_ma20
             is_above_ma = w_c_price > w_c_smma7 and w_c_price > w_c_ma20
-            
             if is_w_gc and is_above_ma:
                 long_trend_list.append(f"{name}({symbol})")
 
-        # 3. 4시간 봉 분석이다
         df_4h = yf.download(symbol, period='30d', interval='4h', progress=False)
         if not df_4h.empty and len(df_4h) >= 20:
             if isinstance(df_4h.columns, pd.MultiIndex): 
@@ -193,7 +162,6 @@ for symbol in tickers:
         print(f"{symbol} 분석 실패했다: {e}")
         continue
 
-# 리포트 구성이다
 report = []
 report.append("📢 실시간 주식 시장 분석")
 report.append("-" * 20)
@@ -203,15 +171,17 @@ report.append("\n2. 거래량 급증 종목 (평균 1.5배 이상):")
 report.append(", ".join(high_volume_list) if high_volume_list else "없음")
 report.append("\n3. 단기 상승 추세인 종목 (일봉 20MA 상회):")
 report.append(", ".join(uptrend_list) if uptrend_list else "없음")
-report.append("\n4. 7SMMA 지지/저항 근접 구간:")
-report.append(", ".join(touch_ma7_list) if touch_ma7_list else "없음")
-report.append("\n5. 20일선 지지 확인 구간:")
+report.append("\n4. 7SMMA 지지 구간 (이평선 위 근접):")
+report.append(", ".join(support_smma7_list) if support_smma7_list else "없음")
+report.append("\n5. 7SMMA 저항 구간 (이평선 아래 근접):")
+report.append(", ".join(resistance_smma7_list) if resistance_smma7_list else "없음")
+report.append("\n6. 20일선 지지 확인 구간:")
 report.append(", ".join(support_list) if support_list else "없음")
-report.append("\n6. 4시간 봉 변동성 포착:")
+report.append("\n7. 4시간 봉 변동성 포착:")
 report.append(", ".join(bb_alert_list) if bb_alert_list else "없음")
-report.append("\n7. RSI 지표 과열/침체 신호:")
+report.append("\n8. RSI 지표 과열/침체 신호:")
 report.append(", ".join(rsi_alert_list) if rsi_alert_list else "없음")
-report.append("\n8. 장기 상승 추세 종목:")
+report.append("\n9. 장기 상승 추세 종목:")
 report.append(", ".join(long_trend_list) if long_trend_list else "없음")
 report.append("-" * 20)
 report.append("💡 오늘의 매수 추천 종목 (추세 강도 중심):")
