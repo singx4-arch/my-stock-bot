@@ -1,0 +1,23 @@
+name: Daily Buy Recommendation Report
+
+on:
+  schedule:
+    # 월~금 한국 시간 밤 11시(UTC 14:00)에 한 번 실행한다이다
+    - cron: '0 14 * * 1-5'
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+      - name: Install dependencies
+        run: pip install yfinance pandas requests
+      - name: Run Recommendation Report
+        env:
+          TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: python recommend_v2.py
