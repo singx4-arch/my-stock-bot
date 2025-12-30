@@ -1,0 +1,23 @@
+name: Breakout Alert Watcher
+
+on:
+  schedule:
+    # 한국 시간 밤 11시 ~ 아침 7시 사이 5분마다 실행한다이다
+    - cron: '*/5 14-22 * * 1-5'  
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+      - name: Install dependencies
+        run: pip install yfinance pandas requests
+      - name: Run Breakout Monitor
+        env:
+          TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: python breakout_alert.py
