@@ -1,4 +1,4 @@
-name: Momentum Ignition Alert
+name: 급등 급락 알람
 
 on:
   schedule:
