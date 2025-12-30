@@ -81,7 +81,7 @@ for symbol, name in ticker_map.items():
         df_w = yf.download(symbol, period='2y', interval='1wk', progress=False)
         if len(df_w) >= 30:
             if isinstance(df_w.columns, pd.MultiIndex): df_w.columns = df_w.columns.get_level_values(0)
-            df_w['WPH'] = df_w['High'][(df_w['High'] == df_w['High'].rolling(window=21, center=True).max())]
+            df_w['WPH'] = df_w['High'][(df_w['High'] == df_w['High'].rolling(window=31, center=True).max())]
             wphs = df_w.dropna(subset=['WPH'])
             if len(wphs) >= 2:
                 wp1, wp2 = wphs.iloc[-2], wphs.iloc[-1]
