@@ -79,7 +79,7 @@ for symbol in tickers:
 
 # 리포트 구성이다
 report = []
-report.append("📢 오늘의 매수 추천 및 전략 리포트이다")
+report.append("📢 매수가, 손절가")
 report.append("=" * 20)
 
 if recommend_details:
