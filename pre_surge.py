@@ -13,14 +13,11 @@ def send_message(text):
     requests.get(url, params=params)
 
 ticker_map = {
-    'NVDA': '엔비디아', 'TSLA': '테슬라', 'AAPL': '애플', 
-    'AMZN': '아마존', 'META': '메타', 'GOOGL': '구글', 'PLTR': '팔란티어', 
-    'AMD': 'AMD', 'NFLX': '넷플릭스', 
-    'AVGO': '브로드컴', 'TQQQ': '나스닥3배레버', 'SOXL': '반도체3배레버', 'ARM': 'ARM', 
-    'TSM': 'TSMC', 'MU': '마이크론', 'SMCI': '슈퍼마이크로', 
-    'PYPL': '페이팔', 'PANW': '팔로알토', 
-    'QCOM': '퀄컴', 'ASML': 'ASML', 'SNOW': '스노우플레이크', 
-    'MARA': '마라톤디지털', 'ANET': '아리스타 네트웍스'
+    'NVDA': '엔비디아', 'AAPL': '애플', 'MSFT': '마이크로소프트', 'TSLA': '테슬라', 
+    'AMZN': '아마존', 'META': '메타', 'GOOGL': '구글', 'AVGO': '브로드컴', 
+    'AMD': 'AMD', 'TSM': 'TSMC', 'ASML': 'ASML', 'COST': '코스트코', 
+    'QCOM': '퀄컴', 'ARM': 'ARM', 'TQQQ': '나스닥3배레버', 'SOXL': '반도체3배레버',
+    'PLTR': '팔란티어', 'MU': '마이크론', 'ORCL': '오라클', 'DELL': '델', 'QQQ': 'QQQ'
 }
 
 ignition_alarms = []
