@@ -1,4 +1,4 @@
-name: Breakout Alert Watcher
+name: 돌파 알람
 
 on:
   schedule:
