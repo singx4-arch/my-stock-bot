@@ -2,16 +2,14 @@ name: trend line,divergence alert
 
 on:
   schedule:
-    # 5분마다 실행한다이다 (UTC 기준)
     - cron: '*/5 * * * *'
-  workflow_dispatch: # 필요할 때 수동으로도 실행 가능하게 한다이다
+  workflow_dispatch:
 
 jobs:
   monitor:
     runs-on: ubuntu-latest
-    # 저장소에 파일을 다시 올릴 수 있는 권한을 부여한다이다
     permissions:
-      contents: write
+      contents: write # 파일 쓰기 권한이다
 
     steps:
       - name: Checkout code
@@ -30,16 +28,14 @@ jobs:
         env:
           TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
-        run: python trend_line.py #
+        run: python trend_line.py
 
-      # 변경된 sent_alerts.json 파일을 다시 깃허브에 저장하는 단계이다
+      # 파일 기록 저장 단계이다
       - name: Commit and Push changes
         run: |
-          git config --global user.name "GitHub Action"
-          git config --global user.email "action@github.com"
-          # 파일이 생성되었을 경우에만 저장소에 추가한다이다
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
           if [ -f sent_alerts.json ]; then
             git add sent_alerts.json
-            git commit -m "Update sent alerts [skip ci]" || echo "No changes to commit"
-            git push
+            git diff --quiet && git diff --staged --quiet || (git commit -m "Update sent alerts [skip ci]" && git push)
           fi
