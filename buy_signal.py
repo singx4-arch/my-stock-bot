@@ -65,7 +65,7 @@ for symbol, name in ticker_map.items():
 
 if daily_buy_list or weekly_buy_list:
     report = []
-    report.append("💎 볼린저 밴드 새로운 바닥 진입 알람이다")
+    report.append("💎 볼린저 밴드 새로운 바닥 진입 알람")
     report.append("-" * 20)
     
     if daily_buy_list:
