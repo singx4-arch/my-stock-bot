@@ -3,7 +3,6 @@ import pandas as pd
 import requests
 import os
 
-# 깃허브 Secrets 정보 가져오기이다
 token = os.getenv('TELEGRAM_TOKEN')
 chat_id = os.getenv('TELEGRAM_CHAT_ID')
 
@@ -43,13 +42,11 @@ recommend_details = []
 for symbol in tickers:
     name = ticker_map[symbol]
     try:
-        # 일봉 데이터 분석이다
         df_d = yf.download(symbol, period='1y', interval='1d', progress=False)
         if df_d.empty or len(df_d) < 50: continue
         if isinstance(df_d.columns, pd.MultiIndex): 
             df_d.columns = df_d.columns.get_level_values(0)
         
-        # 지표 계산이다
         df_d['MA20'] = df_d['Close'].rolling(window=20).mean()
         df_d['SMMA7'] = df_d['Close'].ewm(alpha=1/7, adjust=False).mean()
         
@@ -58,12 +55,22 @@ for symbol in tickers:
         c_ma20 = float(curr['MA20'])
         c_smma7 = float(curr['SMMA7'])
 
-        # 매수 추천 조건이다
         if c_price > c_ma20 and c_smma7 > c_ma20:
-            # 최근 10일 저점 계산이다
             recent_low = float(df_d['Low'].iloc[-10:].min())
             
-            detail = f"📍 {name}({symbol})\n"
+            # 집중 알람 로직이다 (괴리율 1% 이내 확인)
+            is_focus = False
+            gap_smma = abs(c_price - c_smma7) / c_smma7
+            gap_ma20 = abs(c_price - c_ma20) / c_ma20
+            
+            if gap_smma <= 0.01 or gap_ma20 <= 0.01:
+                is_focus = True
+            
+            title = f"📍 {name}({symbol})"
+            if is_focus:
+                title += " 🚨 집중하세요!!!"
+            
+            detail = f"{title}\n"
             detail += f"현재가: {c_price:.2f}$\n"
             detail += f"--- 진입 가이드 ---\n"
             detail += f"1. 7SMMA 지지 시: {c_smma7:.2f}$\n"
@@ -77,7 +84,6 @@ for symbol in tickers:
         print(f"{symbol} 분석 실패했다이다: {e}")
         continue
 
-# 리포트 구성이다
 report = []
 report.append("📢 매수가, 손절가")
 report.append("=" * 20)
@@ -88,6 +94,6 @@ else:
     report.append("조건에 맞는 종목이 없다이다")
 
 report.append("\n" + "=" * 20)
-report.append("매수 전 반드시 본인의 기준을 확인하라이다.")
+report.append("🚨 매수 집중!!")
 
 send_message("\n".join(report))
