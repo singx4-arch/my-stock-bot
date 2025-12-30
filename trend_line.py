@@ -32,50 +32,70 @@ trend_alerts = []
 
 for symbol, name in ticker_map.items():
     try:
-        # 일봉 데이터 분석이다
+        # 1. 일봉 분석 데이터 로드이다
         df_d = yf.download(symbol, period='1y', interval='1d', progress=False)
-        if len(df_d) < 50: continue
+        if len(df_d) < 200: continue
         if isinstance(df_d.columns, pd.MultiIndex): df_d.columns = df_d.columns.get_level_values(0)
 
         df_d['RSI'] = calculate_rsi(df_d['Close'])
         curr_p = float(df_d['Close'].iloc[-1])
         prev_p = float(df_d['Close'].iloc[-2])
+        curr_low = float(df_d['Low'].iloc[-1])
+        curr_high = float(df_d['High'].iloc[-1])
         idx_d = len(df_d) - 1
 
-        # 1. RSI 다이버전스 로직 추가이다
-        # 피벗 포인트를 찾아 가격과 RSI의 고점/저점을 비교한다이다
+        # RSI 다이버전스 분석이다
         df_d['PH'] = df_d['High'][(df_d['High'] == df_d['High'].rolling(window=11, center=True).max())]
         df_d['PL'] = df_d['Low'][(df_d['Low'] == df_d['Low'].rolling(window=11, center=True).min())]
         phs = df_d.dropna(subset=['PH'])
         pls = df_d.dropna(subset=['PL'])
 
-        # 상승 다이버전스 감지 (저점 비교)이다
         if len(pls) >= 2:
             l1, l2 = pls.iloc[-2], pls.iloc[-1]
-            if l2['Low'] < l1['Low'] and l2['RSI'] > l1['RSI']:
-                # 현재 시점이 최근 저점 발생 후 반등 중인지 확인한다이다
-                if curr_p > l2['Low']:
-                    trend_alerts.append(f"🌌 {name}({symbol}): [신호] RSI 상승 다이버전스 출현!! (추세 반전 기대)")
+            if l2['Low'] < l1['Low'] and l2['RSI'] > l1['RSI'] and curr_p > l2['Low']:
+                trend_alerts.append(f"🌌 {name}({symbol}): RSI 상승 다이버전스 출현!!")
 
-        # 하락 다이버전스 감지 (고점 비교)이다
         if len(phs) >= 2:
             h1, h2 = phs.iloc[-2], phs.iloc[-1]
-            if h2['High'] > h1['High'] and h2['RSI'] < h1['RSI']:
-                if curr_p < h2['High']:
-                    trend_alerts.append(f"🌋 {name}({symbol}): [주의] RSI 하락 다이버전스 출현!! (조정 가능성)")
+            if h2['High'] > h1['High'] and h2['RSI'] < h1['RSI'] and curr_p < h2['High']:
+                trend_alerts.append(f"🌋 {name}({symbol}): RSI 하락 다이버전스 출현!!")
 
-        # 2. 기존 추세선 및 리테스트 로직이다
-        # (중략: 기존에 작성했던 200일선, 추세선 리테스트, 주봉 돌파 로직이 이 자리에 들어간다이다)
-        
-        # 예시로 200일선 로직만 유지한다이다
+        # 200일선 및 추세선 리테스트 로직 (실제 코드 삽입됨)이다
         ma200 = df_d['Close'].rolling(window=200).mean().iloc[-1]
-        if curr_p > ma200 and prev_p <= df_d['Close'].rolling(window=200).mean().iloc[-2]:
-            trend_alerts.append(f"🏰 {name}({symbol}): [장기] 200일선 상향 돌파!")
+        prev_ma200 = df_d['Close'].rolling(window=200).mean().iloc[-2]
+        if curr_p > ma200 and prev_p <= prev_ma200:
+            trend_alerts.append(f"🏰 {name}({symbol}): 200일선 상향 돌파!")
+
+        # 하락 추세선 리테스트 지지이다
+        if len(phs) >= 2:
+            p1, p2 = phs.iloc[-2], phs.iloc[-1]
+            x1, y1 = df_d.index.get_loc(p1.name), p1['PH']
+            x2, y2 = df_d.index.get_loc(p2.name), p2['PH']
+            m_h = (y2 - y1) / (x2 - x1)
+            if m_h < 0:
+                line_val = m_h * (idx_d - x1) + y1
+                if prev_p > line_val and curr_low <= line_val * 1.005 and curr_p >= line_val:
+                    trend_alerts.append(f"💎 {name}({symbol}): 돌파 후 지지 확인 (리테스트 매수)")
+
+        # 주봉 분석이다
+        df_w = yf.download(symbol, period='2y', interval='1wk', progress=False)
+        if len(df_w) >= 30:
+            if isinstance(df_w.columns, pd.MultiIndex): df_w.columns = df_w.columns.get_level_values(0)
+            df_w['WPH'] = df_w['High'][(df_w['High'] == df_w['High'].rolling(window=21, center=True).max())]
+            wphs = df_w.dropna(subset=['WPH'])
+            if len(wphs) >= 2:
+                wp1, wp2 = wphs.iloc[-2], wphs.iloc[-1]
+                wx1, wy1 = df_w.index.get_loc(wp1.name), wp1['WPH']
+                wx2, wy2 = df_w.index.get_loc(wp2.name), wp2['WPH']
+                wm_h = (wy2 - wy1) / (wx2 - wx1)
+                if wm_h < 0:
+                    w_line = wm_h * (len(df_w) - 1 - wx1) + wy1
+                    if curr_p > w_line and prev_p <= w_line:
+                        trend_alerts.append(f"🏛️ {name}({symbol}): 주봉 하락 추세선 돌파!")
 
     except Exception as e:
-        print(f"Error: {e}")
         continue
 
 if trend_alerts:
-    msg = "⚖️ [종합 추세 및 다이버전스 알림]이다\n" + "-" * 20 + "\n" + "\n\n".join(trend_alerts)
+    msg = "⚖️ 종합 추세 및 다이버전스 알림이다\n" + "-" * 20 + "\n" + "\n\n".join(trend_alerts)
     send_message(msg)
