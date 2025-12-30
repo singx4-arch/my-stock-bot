@@ -1,4 +1,4 @@
-name: trend line monitor
+name: trend line alrte
 
 on:
   schedule:
