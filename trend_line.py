@@ -12,10 +12,12 @@ def send_message(text):
     params = {'chat_id': chat_id, 'text': text, 'parse_mode': 'Markdown'}
     requests.get(url, params=params)
 
-ticker_map = {
-    'NVDA': '엔비디아', 'TSLA': '테슬라', 'PLTR': '팔란티어', 
-    'AAPL': '애플', 'MSFT': '마이크로소프트', 'TQQQ': '나스닥3배',
-    'ORCL': '오라클', 'MU': '마이크론', 'DELL': '델', 'VRT': '버티브'
+ticker_map = { 
+    'NVDA': '엔비디아', 'AAPL': '애플', 'MSFT': '마이크로소프트', 'TSLA': '테슬라', 
+    'AMZN': '아마존', 'META': '메타', 'GOOGL': '구글', 'AVGO': '브로드컴', 
+    'AMD': 'AMD', 'TSM': 'TSMC', 'ASML': 'ASML', 'COST': '코스트코', 
+    'QCOM': '퀄컴', 'ARM': 'ARM', 'TQQQ': '나스닥3배레버', 'SOXL': '반도체3배레버',
+    'PLTR': '팔란티어', 'MU': '마이크론', 'ORCL': '오라클', 'DELL': '델', 'QQQ': 'QQQ'
 }
 
 trend_alerts = []
