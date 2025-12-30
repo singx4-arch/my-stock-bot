@@ -2,22 +2,41 @@ name: 돌파 알람
 
 on:
   schedule:
-    # 한국 시간 밤 11시 ~ 아침 7시 사이 5분마다 실행한다이다
+    # 한국 시간 밤 11시 ~ 아침 7시 사이 5분마다 실행한다이다 (UTC 14:00 - 22:59)
     - cron: '*/5 14-22 * * 1-5'  
   workflow_dispatch:
 
 jobs:
   build:
     runs-on: ubuntu-latest
+    # 저장소에 파일을 기록할 수 있는 권한을 부여한다이다
+    permissions:
+      contents: write
+
     steps:
       - uses: actions/checkout@v3
+
       - uses: actions/setup-python@v4
         with:
           python-version: '3.10'
+
       - name: Install dependencies
-        run: pip install yfinance pandas requests
+        run: pip install yfinance pandas requests numpy
+
       - name: Run Breakout Monitor
         env:
           TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
-        run: python breakout_alert.py
+        run: python breakout_alert.py # 실제 실행 파일명이다
+
+      # 보낸 알람 기록(sent_alerts.json)을 다시 깃허브에 저장한다이다
+      - name: Commit and Push changes
+        run: |
+          git config --global user.name "GitHub Action"
+          git config --global user.email "action@github.com"
+          # 만약 breakout_alert.py에서 사용하는 파일명이 다르다면 그 파일명으로 수정하라이다
+          if [ -f sent_alerts.json ]; then
+            git add sent_alerts.json
+            git commit -m "Update breakout sent alerts [skip ci]" || echo "No changes to commit"
+            git push
+          fi
