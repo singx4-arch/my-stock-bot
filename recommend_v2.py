@@ -52,18 +52,23 @@ for symbol in tickers:
         c_ma20 = float(curr['MA20'])
         c_smma7 = float(curr['SMMA7'])
 
+        # 기본 정배열 조건이다
         if c_price > c_ma20 and c_smma7 > c_ma20:
             recent_low = float(df_d['Low'].iloc[-10:].min())
             
-            # 구체적인 지지 알람 로직이다
             support_status = ""
             gap_smma = abs(c_price - c_smma7) / c_smma7
             gap_ma20 = abs(c_price - c_ma20) / c_ma20
             
-            if gap_smma <= 0.01: # 1% 이내 근접 시이다
-                support_status += " 🚨 7smma 지지입니다!!"
-            if gap_ma20 <= 0.01: # 1% 이내 근접 시이다
-                support_status += " 🚨 20일선 지지 입니다!!"
+            # 1순위: 7SMMA 위에 있을 때이다
+            if c_price >= c_smma7:
+                if gap_smma <= 0.01:
+                    support_status = " 🚨 7smma 지지입니다!!"
+            
+            # 2순위: 7SMMA를 이탈하고 20일선 위에 있을 때이다
+            elif c_price < c_smma7:
+                if gap_ma20 <= 0.01:
+                    support_status = " 🚨 20일선 지지 입니다!!"
             
             title = f"📍 {name}({symbol}){support_status}"
             
@@ -91,6 +96,6 @@ else:
     report.append("조건에 맞는 종목이 없다이다")
 
 report.append("\n" + "=" * 20)
-report.append("🚨 표시가 된 종목은 해당 이평선 지지 여부를 집중해서 보라이다")
+report.append("💡 7smma를 깨면 20일선 지지를 확인하라이다")
 
 send_message("\n".join(report))
