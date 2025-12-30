@@ -16,7 +16,7 @@ ticker_map = {
     'NVDA': '엔비디아', 'TSLA': '테슬라', 'AAPL': '애플', 'MSFT': '마이크로소프트',
     'AMZN': '아마존', 'META': '메타', 'GOOGL': '구글', 'AMD': 'AMD',
     'AVGO': '브로드컴', 'MU': '마이크론', 'ARM': 'ARM', 'NFLX': '넷플릭스',
-    'PANW': '팔로알토', 'QCOM': '퀄컴', 'ASML': 'ASML'
+    'PANW': '팔로알토', 'QCOM': '퀄컴', 'ASML': 'ASML', 'QQQ' : 'QQQ'
 }
 
 def check_new_touch(df):
