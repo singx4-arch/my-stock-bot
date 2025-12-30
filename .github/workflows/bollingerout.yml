@@ -1,4 +1,4 @@
-name: Bollinger Band Watcher
+name: 괴리율 알람
 
 on:
   schedule:
