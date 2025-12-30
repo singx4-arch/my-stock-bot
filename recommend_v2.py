@@ -25,11 +25,10 @@ def send_message(text):
         print(f"전송 중 오류 발생했다이다: {e}")
 
 ticker_map = { 
-    'NVDA': '엔비디아', 'PLTR': '팔란티어', 'ORCL': '오라클', 'DELL': '델', 
-    'VRT': '버티브', 'MU': '마이크론', 'TSLA': '테슬라', 'AAPL': '애플', 
-    'MSFT': '마이크로소프트', 'AMZN': '아마존', 'META': '메타', 'GOOGL': '구글', 
-    'AVGO': '브로드컴', 'AMD': 'AMD', 'TSM': 'TSMC', 'ASML': 'ASML', 
-    'ARM': 'ARM', 'TQQQ': '나스닥3배레버', 'SOXL': '반도체3배레버' 
+    'NVDA': '엔비디아', 'AAPL': '애플', 'MSFT': '마이크로소프트', 'TSLA': '테슬라', 
+    'AMZN': '아마존', 'META': '메타', 'GOOGL': '구글', 'AVGO': '브로드컴', 
+    'AMD': 'AMD', 'TSM': 'TSMC', 'ASML': 'ASML', 'COST': '코스트코', 
+    'QCOM': '퀄컴', 'ARM': 'ARM', 'TQQQ': '나스닥3배레버', 'SOXL': '반도체3배레버' 
 }
 
 tickers = list(ticker_map.keys())
@@ -58,7 +57,6 @@ for symbol in tickers:
             gap_smma = abs(c_price - c_smma7) / c_smma7
             gap_ma20 = abs(c_price - c_ma20) / c_ma20
             
-            # 우선순위 지지 판별 로직이다
             if c_price >= c_smma7:
                 if gap_smma <= 0.01:
                     support_status = "\n> 🚨 7SMMA 지지 구간이다!!"
@@ -66,13 +64,14 @@ for symbol in tickers:
                 if gap_ma20 <= 0.01:
                     support_status = "\n> 🚨 20일선 지지 구간이다!!"
             
+            # 가독성을 위해 불렛 포인트와 헤더를 사용했다이다
             detail = f"### 📍 {name} ({symbol}) {support_status}\n"
             detail += f"* 현재가: {c_price:.2f}$\n"
-            detail += f"* 진입 타점 가이드\n"
+            detail += f"* 진입 타점\n"
             detail += f"  - 1차 (7SMMA): {c_smma7:.2f}$\n"
             detail += f"  - 2차 (20MA): {c_ma20:.2f}$\n"
-            detail += f"* 손절 대응 라인\n"
-            detail += f"  - 최근 저점 이탈: {recent_low:.2f}$\n"
+            detail += f"* 손절 라인\n"
+            detail += f"  - 저점 이탈: {recent_low:.2f}$\n"
             detail += f"  - 20MA 이탈: {c_ma20:.2f}$"
             recommend_details.append(detail)
 
@@ -81,15 +80,15 @@ for symbol in tickers:
         continue
 
 report = []
-report.append("## 🏛️ 핵심 AI 트렌드 및 우량주 전략 리포트이다")
+report.append("## 🏛️ 오늘의 매수 전략 리포트이다")
 report.append("---")
 
 if recommend_details:
     report.append("\n\n---\n\n".join(recommend_details))
 else:
-    report.append("> 현재 매수 조건에 부합하는 종목이 없다이다")
+    report.append("> 조건에 맞는 종목이 현재 없다이다")
 
 report.append("\n---")
-report.append("💡 7SMMA 이탈 시 20일선의 강력한 지지 여부를 확인하라이다")
+report.append("💡 7SMMA 이탈 시 20일선 지지를 반드시 확인하라이다")
 
 send_message("\n".join(report))
