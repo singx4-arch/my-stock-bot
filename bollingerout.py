@@ -69,5 +69,5 @@ for symbol, name in ticker_map.items():
 if bb_alarms:
     msg = "⚠️ [강력 신호] 4시간/1시간 볼린저 밴드 동시 이탈이다\n" + "-" * 20 + "\n"
     msg += "\n".join(bb_alarms)
-    msg += "\n\n두 시간대 모두 밴드를 벗어나 추세 전환 가능성이 매우 높다이다."
+    msg += "\n\n두 시간대 모두 밴드를 벗어나 추세 전환 가능성이 매우 높다."
     send_message(msg)
