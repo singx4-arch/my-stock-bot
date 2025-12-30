@@ -3,9 +3,26 @@ import pandas as pd
 import requests
 import os
 import numpy as np
+import json
+from datetime import datetime
 
 token = os.getenv('TELEGRAM_TOKEN')
 chat_id = os.getenv('TELEGRAM_CHAT_ID')
+# 보낸 알람을 저장할 파일 이름이다
+SENT_ALERTS_FILE = 'sent_alerts.json'
+
+def load_sent_alerts():
+    if os.path.exists(SENT_ALERTS_FILE):
+        with open(SENT_ALERTS_FILE, 'r') as f:
+            try:
+                return json.load(f)
+            except:
+                return {}
+    return {}
+
+def save_sent_alerts(sent_alerts):
+    with open(SENT_ALERTS_FILE, 'w') as f:
+        json.dump(sent_alerts, f)
 
 def send_message(text):
     if not token or not chat_id: return
@@ -28,11 +45,18 @@ ticker_map = {
     'PLTR': '팔란티어', 'MU': '마이크론', 'ORCL': '오라클', 'DELL': '델', 'QQQ': 'QQQ'
 }
 
-trend_alerts = []
+# 1. 오늘 날짜와 이미 보낸 알람 목록을 불러온다이다
+today_str = datetime.now().strftime('%Y-%m-%d')
+sent_alerts = load_sent_alerts()
+
+# 만약 파일에 저장된 날짜가 오늘이 아니라면 초기화한다이다 (날이 바뀌면 다시 알람 가능)
+if sent_alerts.get('date') != today_str:
+    sent_alerts = {'date': today_str, 'alerts': []}
+
+new_alerts = []
 
 for symbol, name in ticker_map.items():
     try:
-        # 1. 일봉 분석 데이터 로드이다
         df_d = yf.download(symbol, period='1y', interval='1d', progress=False)
         if len(df_d) < 200: continue
         if isinstance(df_d.columns, pd.MultiIndex): df_d.columns = df_d.columns.get_level_values(0)
@@ -44,6 +68,9 @@ for symbol, name in ticker_map.items():
         curr_high = float(df_d['High'].iloc[-1])
         idx_d = len(df_d) - 1
 
+        # 체크할 신호들을 리스트에 담는다이다
+        current_signals = []
+
         # RSI 다이버전스 분석이다
         df_d['PH'] = df_d['High'][(df_d['High'] == df_d['High'].rolling(window=11, center=True).max())]
         df_d['PL'] = df_d['Low'][(df_d['Low'] == df_d['Low'].rolling(window=11, center=True).min())]
@@ -53,18 +80,18 @@ for symbol, name in ticker_map.items():
         if len(pls) >= 2:
             l1, l2 = pls.iloc[-2], pls.iloc[-1]
             if l2['Low'] < l1['Low'] and l2['RSI'] > l1['RSI'] and curr_p > l2['Low']:
-                trend_alerts.append(f"🌌 {name}({symbol}): RSI 상승 다이버전스 출현!!")
+                current_signals.append(f"🌌 {name}({symbol}): RSI 상승 다이버전스 출현!!")
 
         if len(phs) >= 2:
             h1, h2 = phs.iloc[-2], phs.iloc[-1]
             if h2['High'] > h1['High'] and h2['RSI'] < h1['RSI'] and curr_p < h2['High']:
-                trend_alerts.append(f"🌋 {name}({symbol}): RSI 하락 다이버전스 출현!!")
+                current_signals.append(f"🌋 {name}({symbol}): RSI 하락 다이버전스 출현!!")
 
-        # 200일선 및 추세선 리테스트 로직 (실제 코드 삽입됨)이다
+        # 200일선 상향 돌파이다
         ma200 = df_d['Close'].rolling(window=200).mean().iloc[-1]
         prev_ma200 = df_d['Close'].rolling(window=200).mean().iloc[-2]
         if curr_p > ma200 and prev_p <= prev_ma200:
-            trend_alerts.append(f"🏰 {name}({symbol}): 200일선 상향 돌파!")
+            current_signals.append(f"🏰 {name}({symbol}): 200일선 상향 돌파!")
 
         # 하락 추세선 리테스트 지지이다
         if len(phs) >= 2:
@@ -75,7 +102,7 @@ for symbol, name in ticker_map.items():
             if m_h < 0:
                 line_val = m_h * (idx_d - x1) + y1
                 if prev_p > line_val and curr_low <= line_val * 1.005 and curr_p >= line_val:
-                    trend_alerts.append(f"💎 {name}({symbol}): 돌파 후 지지 확인 (리테스트 매수)")
+                    current_signals.append(f"💎 {name}({symbol}): 돌파 후 지지 확인 (리테스트 매수)")
 
         # 주봉 분석이다
         df_w = yf.download(symbol, period='2y', interval='1wk', progress=False)
@@ -87,15 +114,23 @@ for symbol, name in ticker_map.items():
                 wp1, wp2 = wphs.iloc[-2], wphs.iloc[-1]
                 wx1, wy1 = df_w.index.get_loc(wp1.name), wp1['WPH']
                 wx2, wy2 = df_w.index.get_loc(wp2.name), wp2['WPH']
-                wm_h = (wy2 - wy1) / (wx2 - wx1)
+                wm_h = (wy2 - wy1) / (xw2 - wx1)
                 if wm_h < 0:
                     w_line = wm_h * (len(df_w) - 1 - wx1) + wy1
                     if curr_p > w_line and prev_p <= w_line:
-                        trend_alerts.append(f"🏛️ {name}({symbol}): 주봉 하락 추세선 돌파!")
+                        current_signals.append(f"🏛️ {name}({symbol}): 주봉 하락 추세선 돌파!")
+
+        # 2. 오늘 이미 보낸 알람은 제외하고 리스트에 넣는다이다
+        for signal in current_signals:
+            if signal not in sent_alerts['alerts']:
+                new_alerts.append(signal)
+                sent_alerts['alerts'].append(signal)
 
     except Exception as e:
         continue
 
-if trend_alerts:
-    msg = "⚖️ 종합 추세 및 다이버전스 알림이다\n" + "-" * 20 + "\n" + "\n\n".join(trend_alerts)
+# 3. 새로운 알람이 있을 때만 메시지를 보내고 저장한다이다
+if new_alerts:
+    msg = "⚖️ 종합 추세 및 다이버전스 알림이다\n" + "-" * 20 + "\n" + "\n\n".join(new_alerts)
     send_message(msg)
+    save_sent_alerts(sent_alerts)
