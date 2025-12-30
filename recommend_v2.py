@@ -3,6 +3,7 @@ import pandas as pd
 import requests
 import os
 
+# 깃허브 Secrets 정보 가져오기이다
 token = os.getenv('TELEGRAM_TOKEN')
 chat_id = os.getenv('TELEGRAM_CHAT_ID')
 
@@ -24,8 +25,12 @@ def send_message(text):
     except Exception as e: 
         print(f"전송 중 오류 발생했다이다: {e}")
 
-ticker_map = 
-{ 'NVDA': '엔비디아', 'AAPL': '애플', 'MSFT': '마이크로소프트', 'TSLA': '테슬라', 'AMZN': '아마존', 'META': '메타', 'GOOGL': '구글', 'AVGO': '브로드컴', 'AMD': 'AMD', 'TSM': 'TSMC', 'ASML': 'ASML', 'COST': '코스트코', 'QCOM': '퀄컴', 'ARM': 'ARM', 'TQQQ': '나스닥3배레버', 'SOXL': '반도체3배레버' }
+# 우량주 위주의 클린 리스트이다
+ticker_map = { 
+    'NVDA': '엔비디아', 'AAPL': '애플', 'MSFT': '마이크로소프트', 'TSLA': '테슬라', 
+    'AMZN': '아마존', 'META': '메타', 'GOOGL': '구글', 'AVGO': '브로드컴', 
+    'AMD': 'AMD', 'TSM': 'TSMC', 'ASML': 'ASML', 'COST': '코스트코', 
+    'QCOM': '퀄컴', 'ARM': 'ARM', 'TQQQ': '나스닥3배레버', 'SOXL': '반도체3배레버' 
 }
 
 tickers = list(ticker_map.keys())
@@ -50,17 +55,17 @@ for symbol in tickers:
         if c_price > c_ma20 and c_smma7 > c_ma20:
             recent_low = float(df_d['Low'].iloc[-10:].min())
             
-            # 집중 알람 로직이다 (괴리율 1% 이내 확인)
-            is_focus = False
+            # 구체적인 지지 알람 로직이다
+            support_status = ""
             gap_smma = abs(c_price - c_smma7) / c_smma7
             gap_ma20 = abs(c_price - c_ma20) / c_ma20
             
-            if gap_smma <= 0.01 or gap_ma20 <= 0.01:
-                is_focus = True
+            if gap_smma <= 0.01: # 1% 이내 근접 시이다
+                support_status += " 🚨 7smma 지지입니다!!"
+            if gap_ma20 <= 0.01: # 1% 이내 근접 시이다
+                support_status += " 🚨 20일선 지지 입니다!!"
             
-            title = f"📍 {name}({symbol})"
-            if is_focus:
-                title += " 🚨 집중하세요!!!"
+            title = f"📍 {name}({symbol}){support_status}"
             
             detail = f"{title}\n"
             detail += f"현재가: {c_price:.2f}$\n"
@@ -77,7 +82,7 @@ for symbol in tickers:
         continue
 
 report = []
-report.append("📢 매수가, 손절가")
+report.append("📢 매수가, 손절가 가이드 리포트이다")
 report.append("=" * 20)
 
 if recommend_details:
@@ -86,6 +91,6 @@ else:
     report.append("조건에 맞는 종목이 없다이다")
 
 report.append("\n" + "=" * 20)
-report.append("🚨 매수 집중!!")
+report.append("🚨 표시가 된 종목은 해당 이평선 지지 여부를 집중해서 보라이다")
 
 send_message("\n".join(report))
