@@ -51,5 +51,5 @@ for symbol, name in ticker_map.items():
 if breakout_list:
     msg = "🔥 [돌파 신호] 전고점 돌파 종목 포착이다\n" + "-" * 20 + "\n"
     msg += "\n".join(breakout_list)
-    msg += "\n\n강력한 추세 상승의 시작일 가능성이 높다이다."
+    msg += "\n\n강력한 추세 상승의 시작일 가능성이 높다."
     send_message(msg)
