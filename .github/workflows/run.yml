@@ -2,7 +2,7 @@ name: Stock Check Bot
 
 on:
   schedule:
-    - cron: '0 14 * * 1-5'  # 월~금 밤 11시(KST)에만 실행되도록 설정했다이다
+    - cron: '0 13 * * 1-5'  # 월~금 밤 11시(KST)에만 실행되도록 설정했다이다
   workflow_dispatch:
 
 jobs:
