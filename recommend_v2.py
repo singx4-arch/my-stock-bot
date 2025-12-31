@@ -75,7 +75,7 @@ for symbol in tickers:
             detail += f"현재가: {c_price:.2f}$\n"
             detail += f"진입가(7선): {c_smma7:.2f}$\n"
             detail += f"진입가(20선): {c_ma20:.2f}$\n"
-            detail += f"손절가(저점): {recent_low:.2f}$"
+            detail += f"손절가(이전 저점): {recent_low:.2f}$"
             recommend_details.append(detail)
 
     except Exception as e:
@@ -83,7 +83,7 @@ for symbol in tickers:
         continue
 
 # 리포트 조립이다
-report = "📢 단기 매수가 가이드 리포트이다()\n" + "="*20 + "\n\n"
+report = "📢 상승 가능성있는 종목들\n" + "="*20 + "\n\n"
 
 if recommend_details:
     report += "\n\n".join(recommend_details)
