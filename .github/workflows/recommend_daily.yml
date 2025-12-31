@@ -1,4 +1,4 @@
-Name: Daily Buy Recommendation Report
+name: Daily Buy Recommendation Report
 
 on:
   schedule:
