@@ -1,4 +1,4 @@
-name: Daily Buy Recommendation Report
+Name: Daily Buy Recommendation Report
 
 on:
   schedule:
@@ -19,7 +19,7 @@ jobs:
 
       - name: Install dependencies
         run: |
-          pip install yfinance pandas requests numpy
+          pip install yfinance pandas requests numpy scipy
 
       - name: Run Recommendation Report
         env:
