@@ -6,9 +6,21 @@ import numpy as np
 import json
 from datetime import datetime
 
+# 1. 환경 설정 및 세션 로드
 token = os.getenv('TELEGRAM_TOKEN')
 chat_id = os.getenv('TELEGRAM_CHAT_ID')
 SENT_ALERTS_FILE = 'sent_alerts.json'
+
+def load_sent_alerts():
+    if os.path.exists(SENT_ALERTS_FILE):
+        with open(SENT_ALERTS_FILE, 'r') as f:
+            try: return json.load(f)
+            except: return {}
+    return {}
+
+def save_sent_alerts(sent_alerts):
+    with open(SENT_ALERTS_FILE, 'w') as f:
+        json.dump(sent_alerts, f)
 
 def send_message(text):
     if not token or not chat_id: return
@@ -23,8 +35,8 @@ def calculate_rsi(data, window=14):
     rs = gain / loss
     return 100 - (100 / (1 + rs))
 
+# 봇의 로직: 구조적 변곡점(Pivot) 역추적 함수
 def get_pivots(df, lookback=60, filter_size=3, gap=5, mode='low'):
-    """봇의 로직: 구조적 변곡점(Pivot)을 역순으로 탐색"""
     pivots = []
     prices = df['Low'] if mode == 'low' else df['High']
     for i in range(len(df) - 2, len(df) - lookback, -1):
@@ -43,8 +55,8 @@ def get_pivots(df, lookback=60, filter_size=3, gap=5, mode='low'):
             if len(pivots) == 2: break
     return pivots
 
+# 봇의 로직: 방향성 리테스트 감지 함수
 def check_directional_retest(df, pivots, label):
-    """봇의 로직: 돌파/이탈 발생 후 방향성 있는 리테스트 감지"""
     if len(pivots) < 2: return None
     p2, p1 = pivots[0], pivots[1] 
     idx_now = len(df) - 1
@@ -66,7 +78,23 @@ def check_directional_retest(df, pivots, label):
             elif cp > pp: return f"💎 {label} 지지 성공 후 반등 중"
     return None
 
-# 메인 루프 (ticker_map 순회)
+# 2. 분석 대상 종목 설정
+ticker_map = { 
+    'NVDA': '엔비디아', 'AAPL': '애플', 'MSFT': '마이크로소프트', 'TSLA': '테슬라', 
+    'AMZN': '아마존', 'META': '메타', 'GOOGL': '구글', 'AVGO': '브로드컴', 
+    'AMD': 'AMD', 'TSM': 'TSMC', 'ASML': 'ASML', 'COST': '코스트코', 
+    'QCOM': '퀄컴', 'ARM': 'ARM', 'TQQQ': '나스닥3배레버', 'SOXL': '반도체3배레버',
+    'PLTR': '팔란티어', 'MU': '마이크론', 'ORCL': '오라클', 'DELL': '델', 'QQQ': 'QQQ'
+}
+
+today_str = datetime.now().strftime('%Y-%m-%d')
+sent_alerts = load_sent_alerts()
+if sent_alerts.get('date') != today_str:
+    sent_alerts = {'date': today_str, 'alerts': []}
+
+new_alerts = []
+
+# 3. 메인 분석 루프
 for symbol, name in ticker_map.items():
     try:
         df_d = yf.download(symbol, period='1y', interval='1d', progress=False)
@@ -77,36 +105,46 @@ for symbol, name in ticker_map.items():
         curr_p = float(df_d['Close'].iloc[-1])
         idx_d = len(df_d) - 1
 
-        # 1. 다이버전스 분석 (깃허브 로직 유지)
+        # 다이버전스 분석
         df_d['PH'] = df_d['High'][(df_d['High'] == df_d['High'].rolling(window=11, center=True).max())]
         df_d['PL'] = df_d['Low'][(df_d['Low'] == df_d['Low'].rolling(window=11, center=True).min())]
         pls = df_d.dropna(subset=['PL'])
         phs = df_d.dropna(subset=['PH'])
 
-        # 상승 다이버전스
         if len(pls) >= 2:
             l1, l2 = pls.iloc[-2], pls.iloc[-1]
             if l2['Low'] < l1['Low'] and l2['RSI'] > l1['RSI'] and curr_p > l2['Low']:
-                new_alerts.append(f"📈 {name}({symbol}): RSI 상승 다이버전스 출현!!")
+                sig_key = f"{symbol}_BULL_DIV"
+                if sig_key not in sent_alerts['alerts']:
+                    new_alerts.append(f"📈 {name}({symbol}): RSI 상승 다이버전스 출현!!")
+                    sent_alerts['alerts'].append(sig_key)
 
-        # 하락 다이버전스
         if len(phs) >= 2:
             h1, h2 = phs.iloc[-2], phs.iloc[-1]
             if h2['High'] > h1['High'] and h2['RSI'] < h1['RSI'] and curr_p < h2['High']:
-                new_alerts.append(f"📉 {name}({symbol}): RSI 하락 다이버전스 출현!!")
+                sig_key = f"{symbol}_BEAR_DIV"
+                if sig_key not in sent_alerts['alerts']:
+                    new_alerts.append(f"📉 {name}({symbol}): RSI 하락 다이버전스 출현!!")
+                    sent_alerts['alerts'].append(sig_key)
 
-        # 2. 봇의 로직 기반 단기 및 장기 지지선 리테스트
-        # TSLA(11/21, 12/09) 및 JPM(12/10, 12/18) 마디를 정밀 추적함
+        # 봇의 로직 기반 지지선/저항선 리테스트 분석
         st_pivots = get_pivots(df_d, lookback=60, filter_size=3, gap=5, mode='low')
         st_retest_msg = check_directional_retest(df_d, st_pivots, "단기 지지선")
-        if st_retest_msg: new_alerts.append(f"🛡️ {name}({symbol}): {st_retest_msg}")
+        if st_retest_msg:
+            sig_key = f"{symbol}_ST_RETEST"
+            if sig_key not in sent_alerts['alerts']:
+                new_alerts.append(f"🛡️ {name}({symbol}): {st_retest_msg}")
+                sent_alerts['alerts'].append(sig_key)
 
-        # PLTR(8/20, 11/21) 같은 굵직한 장기 마디를 추적함
         lt_pivots = get_pivots(df_d, lookback=180, filter_size=15, gap=20, mode='low')
         lt_retest_msg = check_directional_retest(df_d, lt_pivots, "장기 지지선")
-        if lt_retest_msg: new_alerts.append(f"🏰 {name}({symbol}): {lt_retest_msg}")
+        if lt_retest_msg:
+            sig_key = f"{symbol}_LT_RETEST"
+            if sig_key not in sent_alerts['alerts']:
+                new_alerts.append(f"🏰 {name}({symbol}): {lt_retest_msg}")
+                sent_alerts['alerts'].append(sig_key)
 
-        # 3. 장기 저항선 돌파 및 대기 상태 분석
+        # 장기 저항선 돌파 및 대기 상태
         res_pivots = get_pivots(df_d, lookback=120, filter_size=10, gap=10, mode='high')
         if len(res_pivots) >= 2:
             p2, p1 = res_pivots[0], res_pivots[1]
@@ -114,11 +152,22 @@ for symbol, name in ticker_map.items():
             res_line = m_res * (idx_d - p1['idx']) + p1['val']
             
             if curr_p > res_line:
-                # 최근 7일 내 돌파 이력 확인
                 had_breakout = any(df_d['Close'].iloc[-i] < (m_res * (idx_d - i - p1['idx']) + p1['val']) for i in range(2, 8))
                 if had_breakout and (curr_p - res_line) / res_line < 0.015:
-                    new_alerts.append(f"🔥 {name}({symbol}): 장기 저항 돌파 후 지지 리테스트 중!")
+                    sig_key = f"{symbol}_RES_RETEST"
+                    if sig_key not in sent_alerts['alerts']:
+                        new_alerts.append(f"🔥 {name}({symbol}): 장기 저항 돌파 후 지지 리테스트 중!")
+                        sent_alerts['alerts'].append(sig_key)
             elif (res_line - curr_p) / res_line < 0.015:
-                new_alerts.append(f"🎯 {name}({symbol}): 장기 저항선 돌파 대기 중")
+                sig_key = f"{symbol}_RES_READY"
+                if sig_key not in sent_alerts['alerts']:
+                    new_alerts.append(f"🎯 {name}({symbol}): 장기 저항선 돌파 대기 중")
+                    sent_alerts['alerts'].append(sig_key)
 
     except Exception as e: continue
+
+# 4. 결과 전송
+if new_alerts:
+    msg = "⚖️ 봇의 종합 추세 및 다이버전스 알림\n" + "-" * 20 + "\n" + "\n\n".join(new_alerts)
+    send_message(msg)
+    save_sent_alerts(sent_alerts)
