@@ -78,7 +78,7 @@ for symbol, name in ticker_map.items():
             if l2['Low'] < l1['Low'] and l2['RSI'] > l1['RSI'] and curr_p > l2['Low']:
                 sig_key = f"{symbol}_BULL_DIV"
                 if sig_key not in sent_alerts['alerts']:
-                    new_alerts.append(f"🌌 {name}({symbol}): RSI 상승 다이버전스 출현!!")
+                    new_alerts.append(f"📈 {name}({symbol}): RSI 상승 다이버전스 출현!!")
                     sent_alerts['alerts'].append(sig_key)
 
         # 하락 다이버전스이다
@@ -87,7 +87,7 @@ for symbol, name in ticker_map.items():
             if h2['High'] > h1['High'] and h2['RSI'] < h1['RSI'] and curr_p < h2['High']:
                 sig_key = f"{symbol}_BEAR_DIV"
                 if sig_key not in sent_alerts['alerts']:
-                    new_alerts.append(f"🌋 {name}({symbol}): RSI 하락 다이버전스 출현!!")
+                    new_alerts.append(f"📉 {name}({symbol}): RSI 하락 다이버전스 출현!!")
                     sent_alerts['alerts'].append(sig_key)
 
         # 2. 200일선 상향 돌파이다
