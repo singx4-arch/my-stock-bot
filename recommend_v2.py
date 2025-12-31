@@ -83,7 +83,7 @@ for symbol in tickers:
         continue
 
 # 리포트 조립이다
-report = "📢 매수가 가이드 리포트이다\n" + "="*20 + "\n\n"
+report = "📢 단기 매수가 가이드 리포트이다()\n" + "="*20 + "\n\n"
 
 if recommend_details:
     report += "\n\n".join(recommend_details)
