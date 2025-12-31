@@ -15,7 +15,7 @@ def send_message(text):
     requests.get(url, params=params)
 
 # 재혁이가 현재 보유 중인 종목 티커를 여기에 넣으면 돼
-holding_list = ['NVDA', 'TQQQ'] 
+holding_list = ['NVDA', 'TQQQ', 'QQQ'] 
 
 ticker_map = { 
     'NVDA': '엔비디아', 'AAPL': '애플', 'MSFT': '마이크로소프트', 'TSLA': '테슬라', 
@@ -79,7 +79,7 @@ for symbol, name in ticker_map.items():
 report = "📢 주가 포착 정밀 리포트\n골든 크로스 발생 종목만 선별\n" + "="*25 + "\n\n"
 
 if holding_report_list:
-    report += "💰 현재 보유 종목 모니터링\n"
+    report += "💰 지수 및 엔비디아\n"
     report += "\n\n".join(holding_report_list)
     report += "\n\n" + "*"*25 + "\n\n"
 
