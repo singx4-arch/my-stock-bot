@@ -14,6 +14,9 @@ def send_message(text):
     params = {'chat_id': chat_id, 'text': text}
     requests.get(url, params=params)
 
+# 재혁이가 현재 보유 중인 종목 티커를 여기에 넣으면 돼
+holding_list = ['NVDA', 'TQQQ'] 
+
 ticker_map = { 
     'NVDA': '엔비디아', 'AAPL': '애플', 'MSFT': '마이크로소프트', 'TSLA': '테슬라', 
     'AMZN': '아마존', 'META': '메타', 'GOOGL': '구글', 'AVGO': '브로드컴', 
@@ -24,6 +27,7 @@ ticker_map = {
 
 uptrend_list = []
 consolidation_list = []
+holding_report_list = []
 
 for symbol, name in ticker_map.items():
     try:
@@ -49,6 +53,8 @@ for symbol, name in ticker_map.items():
         is_gold = c_p > c_ma20 and c_smma7 > c_ma20
         recent_low = float(df['Low'].iloc[-10:].min())
         
+        status_icon = "🚀" if (is_gold and is_hh and is_hl) else "💤"
+        
         info = (f"[{name} ({symbol})]\n"
                 f"현재가: {c_p:.2f}$\n"
                 f"진입가(7선): {c_smma7:.2f}$\n"
@@ -56,22 +62,35 @@ for symbol, name in ticker_map.items():
                 f"단기 손절(20선): {c_ma20:.2f}$\n"
                 f"장기 손절(최근저점): {recent_low:.2f}$")
 
-        if is_gold and is_hh and is_hl:
-            uptrend_list.append("🚀 " + info)
-        elif is_gold:
-            consolidation_list.append("💤 " + info)
+        # 보유 종목은 별도 리스트에 먼저 담음
+        if symbol in holding_list:
+            holding_report_list.append(f"📌 {status_icon} " + info)
+        
+        # 전체 리스트 분류
+        if status_icon == "🚀":
+            uptrend_list.append(f"🚀 " + info)
+        else:
+            if is_gold:
+                consolidation_list.append(f"💤 " + info)
 
     except: continue
 
-report = "📢 주가 포착 정밀 리포트이다\n" + "="*25 + "\n\n"
-report += "🚀 찐 상승추세 (전환 확인)이다\n"
-report += "\n\n".join(uptrend_list) if uptrend_list else "조건 만족 종목 없음이다"
+# 리포트 조립
+report = "📢 주가 포착 정밀 리포트\n" + "="*25 + "\n\n"
+
+if holding_report_list:
+    report += "💰 현재 보유 종목 모니터링\n"
+    report += "\n\n".join(holding_report_list)
+    report += "\n\n" + "*"*25 + "\n\n"
+
+report += "🚀 찐 상승추세 (전환 확인)\n"
+report += "\n\n".join(uptrend_list) if uptrend_list else "조건 만족 종목 없음"
 report += "\n\n" + "-"*25 + "\n\n"
-report += "💤 보합 및 파동 확인 중이다\n"
-report += "\n\n".join(consolidation_list) if consolidation_list else "해당 종목 없음이다"
+report += "💤 보합 및 파동 확인 중\n"
+report += "\n\n".join(consolidation_list) if consolidation_list else "해당 종목 없음"
 report += "\n\n" + "="*25 + "\n"
-report += "💡 매매 가이드이다\n"
-report += "1. 단기 손절: 7선이나 20선에서 매수했더라도 일봉 종가가 20선 아래로 마감되어 추세가 하방으로 바뀌면 손절을 권장한다이다.\n"
-report += "2. 장기 손절: 상승 추세를 믿고 홀딩하는 경우에도 전 저점을 이탈하면 추세가 완전히 바뀐 것이므로 손절을 추천한다이다."
+report += "💡 매매 및 손절 가이드\n"
+report += "1. 단기 손절: 7선이나 20선에서 매수한 뒤 일봉 종가가 20선 아래로 마감되어 추세가 하방으로 바뀌면 즉시 손절을 권장한다.\n"
+report += "2. 장기 손절: 상승 추세를 믿고 길게 가져가는 경우 전 저점을 이탈하면 추세의 구조가 무너진 것이므로 손절을 추천한다."
 
 send_message(report)
