@@ -37,30 +37,25 @@ for symbol, name in ticker_map.items():
         curr = df.iloc[-1]
         c_p, c_ma20, c_smma7 = float(curr['Close']), float(curr['MA20']), float(curr['SMMA7'])
         
-        # 엔비디아의 12월 반등을 잡기 위해 거리를 5일로 단축합니다
-        # prominence를 현재가의 0.5%로 낮춰 작은 파동도 찾아냅니다
         peaks, _ = find_peaks(df['High'], distance=5, prominence=c_p*0.005)
         valleys, _ = find_peaks(-df['Low'], distance=5, prominence=c_p*0.005)
         
         is_hh, is_hl = False, False
-        p1, p2, v1, v2 = 0, 0, 0, 0
-        
         if len(peaks) >= 2:
-            p1 = df['High'].iloc[peaks[-2]]
-            p2 = df['High'].iloc[peaks[-1]]
-            is_hh = p2 > p1 # 최근 고점이 직전 소고점보다 높음
-            
+            is_hh = df['High'].iloc[peaks[-1]] > df['High'].iloc[peaks[-2]]
         if len(valleys) >= 2:
-            v1 = df['Low'].iloc[valleys[-2]]
-            v2 = df['Low'].iloc[valleys[-1]]
-            is_hl = v2 > v1 # 최근 저점이 직전 저점보다 높음
+            is_hl = df['Low'].iloc[valleys[-1]] > df['Low'].iloc[valleys[-2]]
 
         is_gold = c_p > c_ma20 and c_smma7 > c_ma20
         recent_low = float(df['Low'].iloc[-10:].min())
         
-        info = f"[{name} ({symbol})]\n현재가: {c_p:.2f}$\n고점변화: {p1:.1f}->{p2:.1f} | 저점변화: {v1:.1f}->{v2:.1f}\n진입가(7선): {c_smma7:.2f}$\n손절가(저점): {recent_low:.2f}$"
+        info = (f"[{name} ({symbol})]\n"
+                f"현재가: {c_p:.2f}$\n"
+                f"진입가(7선): {c_smma7:.2f}$\n"
+                f"진입가(20선): {c_ma20:.2f}$\n"
+                f"단기 손절(20선): {c_ma20:.2f}$\n"
+                f"장기 손절(최근저점): {recent_low:.2f}$")
 
-        # HH와 HL이 동시에 발생하면 상승 추세로 인정합니다
         if is_gold and is_hh and is_hl:
             uptrend_list.append("🚀 " + info)
         elif is_gold:
@@ -68,13 +63,15 @@ for symbol, name in ticker_map.items():
 
     except: continue
 
-report = "📢 엔비디아 반등 포착 정밀 리포트\n" + "="*25 + "\n\n"
-report += "🚀 진짜 상승추세 (12월 회복 흐름 반영)\n"
-report += "\n\n".join(uptrend_list) if uptrend_list else "조건 만족 종목 없음"
+report = "📢 주가 포착 정밀 리포트이다\n" + "="*25 + "\n\n"
+report += "🚀 찐 상승추세 (전환 확인)이다\n"
+report += "\n\n".join(uptrend_list) if uptrend_list else "조건 만족 종목 없음이다"
 report += "\n\n" + "-"*25 + "\n\n"
-report += "💤 보합 및 파동 확인 중\n"
-report += "\n\n".join(consolidation_list) if consolidation_list else "해당 종목 없음"
+report += "💤 보합 및 파동 확인 중이다\n"
+report += "\n\n".join(consolidation_list) if consolidation_list else "해당 종목 없음이다"
 report += "\n\n" + "="*25 + "\n"
-report += "💡 분석: 엔비디아는 12월 1일 이후의 상승 파동이 확인되어 🚀로 분류되었습니다."
+report += "💡 매매 가이드이다\n"
+report += "1. 단기 손절: 7선이나 20선에서 매수했더라도 일봉 종가가 20선 아래로 마감되어 추세가 하방으로 바뀌면 손절을 권장한다이다.\n"
+report += "2. 장기 손절: 상승 추세를 믿고 홀딩하는 경우에도 전 저점을 이탈하면 추세가 완전히 바뀐 것이므로 손절을 추천한다이다."
 
 send_message(report)
