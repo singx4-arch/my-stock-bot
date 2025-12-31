@@ -76,7 +76,7 @@ for symbol, name in ticker_map.items():
     except: continue
 
 # 리포트 조립
-report = "📢 주가 포착 정밀 리포트\n" + "="*25 + "\n\n"
+report = "📢 주가 포착 정밀 리포트\n골든 크로스 발생 종목만 선별\n" + "="*25 + "\n\n"
 
 if holding_report_list:
     report += "💰 현재 보유 종목 모니터링\n"
