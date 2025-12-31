@@ -9,10 +9,10 @@ chat_id = os.getenv('TELEGRAM_CHAT_ID')
 def send_message(text):
     if not token or not chat_id: return
     url = f"https://api.telegram.org/bot{token}/sendMessage"
-    params = {'chat_id': chat_id, 'text': text, 'parse_mode': 'Markdown'}
+    params = {'chat_id': chat_id, 'text': text}
     requests.get(url, params=params)
 
-ticker_map = {
+ticker_map = { 
     'NVDA': '엔비디아', 'AAPL': '애플', 'MSFT': '마이크로소프트', 'TSLA': '테슬라', 
     'AMZN': '아마존', 'META': '메타', 'GOOGL': '구글', 'AVGO': '브로드컴', 
     'AMD': 'AMD', 'TSM': 'TSMC', 'ASML': 'ASML', 'COST': '코스트코', 
@@ -20,67 +20,56 @@ ticker_map = {
     'PLTR': '팔란티어', 'MU': '마이크론', 'ORCL': '오라클', 'DELL': '델', 'QQQ': 'QQQ'
 }
 
-# 결과 저장을 위한 딕셔너리이다
-results = {
-    'short_up': [], 'short_down': [],
-    'long_up': [], 'long_down': [],
-    'break_20': [], 'break_60': []
-}
+uptrend_gold = []    # 🚀 진짜 상승 추세 (HH+HL 달성)이다
+consolidation_gold = [] # 💤 골든크로스이나 추세 미달성 (보합/주의)이다
 
 for symbol, name in ticker_map.items():
     try:
-        # 200일 이평선 계산을 위해 1년치 데이터를 가져온다이다
         df = yf.download(symbol, period='1y', interval='1d', progress=False)
-        if len(df) < 200: continue
+        if len(df) < 50: continue
         if isinstance(df.columns, pd.MultiIndex): df.columns = df.columns.get_level_values(0)
 
-        curr_close = float(df['Close'].iloc[-1])
-        ma200 = df['Close'].rolling(window=200).mean().iloc[-1]
+        # 지표 계산 (MA20, 7SMMA)이다
+        df['MA20'] = df['Close'].rolling(window=20).mean()
+        df['SMMA7'] = df['Close'].ewm(alpha=1/7, adjust=False).mean()
+        
+        curr = df.iloc[-1]
+        c_p, c_ma20, c_smma7 = float(curr['Close']), float(curr['MA20']), float(curr['SMMA7'])
+        
+        # 다우 이론: 10일(2주일) 비교 구간 설정이다
+        recent = df.iloc[-10:] 
+        prev = df.iloc[-20:-10] 
+        c_h, c_l = float(recent['High'].max()), float(recent['Low'].min())
+        p_h, p_l = float(prev['High'].max()), float(prev['Low'].min())
+        
+        # 임계값 없이 순수하게 수치만 비교한다이다
+        is_hh = c_h > p_h # 고점 상승이다
+        is_hl = c_l > p_l # 저점 상승이다
+        is_gold = c_p > c_ma20 and c_smma7 > c_ma20 # 골든크로스(정배열)이다
+        
+        recent_low = float(df['Low'].iloc[-10:].min())
+        info = f"[{name} ({symbol})]\n현재가: {c_p:.2f}$\n진입가(7선): {c_smma7:.2f}$\n진입가(20선): {c_ma20:.2f}$\n손절가(저점): {recent_low:.2f}$"
 
-        # 1. 단기 추세 (5일 단위)이다
-        s_recent = df.iloc[-5:]
-        s_prev = df.iloc[-10:-5]
-        s_curr_h, s_curr_l = float(s_recent['High'].max()), float(s_recent['Low'].min())
-        s_prev_h, s_prev_l = float(s_prev['High'].max()), float(s_prev['Low'].min())
-
-        if s_curr_h > s_prev_h and s_curr_l > s_prev_l:
-            results['short_up'].append(name)
-        elif s_curr_h < s_prev_h and s_curr_l < s_prev_l:
-            results['short_down'].append(name)
-
-        # 2. 장기 추세 (20일 단위 + 200일선 필터)이다
-        l_recent = df.iloc[-20:]
-        l_prev = df.iloc[-40:-20]
-        l_curr_h, l_curr_l = float(l_recent['High'].max()), float(l_recent['Low'].min())
-        l_prev_h, l_prev_l = float(l_prev['High'].max()), float(l_prev['Low'].min())
-
-        # 장기는 200일선 위에서 고점/저점이 모두 높아질 때만 상승으로 인정한다이다
-        if curr_close > ma200 and l_curr_h > l_prev_h and l_curr_l > l_prev_l:
-            results['long_up'].append(name)
-        elif curr_close < ma200 or (l_curr_h < l_prev_h and l_curr_l < l_prev_l):
-            results['long_down'].append(name)
-
-        # 3. 돌파 확인 (20일 단기 / 60일 장기)이다
-        high_20 = float(df.iloc[-21:-1]['High'].max())
-        high_60 = float(df.iloc[-61:-1]['High'].max())
-
-        if curr_close > high_20: results['break_20'].append(name)
-        if curr_close > high_60: results['break_60'].append(name)
+        if is_gold:
+            if is_hh and is_hl:
+                # 고점과 저점이 모두 높아진 완벽한 상승 추세이다
+                uptrend_gold.append("🚀 " + info)
+            else:
+                # 골든크로스 상태이지만 고점이나 저점 중 하나라도 낮아진 경우이다
+                consolidation_gold.append("💤 " + info)
 
     except: continue
 
-# 리포트 생성이다
-report = ["🏛️ 통합 추세 및 다우 이론 리포트이다", "-" * 20]
-report.append("1. 장기 추세 (20일 & 200MA 기준)이다")
-report.append(f"🟢 상승 대세: {', '.join(results['long_up']) if results['long_up'] else '없음'}")
-report.append(f"🔴 하락/주의: {', '.join(results['long_down']) if results['long_down'] else '없음'}")
-report.append("")
-report.append("2. 단기 추세 (5일 기준)이다")
-report.append(f"📈 단기 상승: {', '.join(results['short_up']) if results['short_up'] else '없음'}")
-report.append(f"📉 단기 하락: {', '.join(results['short_down']) if results['short_down'] else '없음'}")
-report.append("")
-report.append("3. 가격 돌파 신호이다")
-report.append(f"🔥 장기(60일) 돌파: {', '.join(results['break_60']) if results['break_60'] else '없음'}")
-report.append(f"⚡ 단기(20일) 돌파: {', '.join(results['break_20']) if results['break_20'] else '없음'}")
+report = "📢 민감형 매수 전략 리포트 (임계값 제거)이다\n" + "="*25 + "\n\n"
+report += "🚀 진짜 상승추세 (10일 HH+HL 달성)이다\n"
+report += "\n\n".join(uptrend_gold) if uptrend_gold else "해당 종목 없음이다"
+report += "\n\n" + "-"*25 + "\n\n"
+report += "💤 보합 및 추세 확인 중 (주의/대기)이다\n"
+report += "\n\n".join(consolidation_gold) if consolidation_gold else "해당 종목 없음이다"
+report += "\n\n" + "="*25 + "\n"
 
-send_message("\n".join(report))
+report += "💡 투자 가이드이다\n"
+report += "1. 가장 안전한 타점: 🚀 그룹 종목이 7smma(7선)에 눌릴 때가 승률이 높다이다.\n"
+report += "2. 역전의 기회: 💤 그룹 종목은 고점(HH)을 다시 높이는 순간 🚀로 진입한다이다."
+
+send_message(report)
