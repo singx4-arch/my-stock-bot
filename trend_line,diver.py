@@ -35,10 +35,11 @@ def calculate_rsi(data, window=14):
     rs = gain / loss
     return 100 - (100 / (1 + rs))
 
-# 봇의 로직: 구조적 변곡점(Pivot) 역추적 함수
+# 봇의 로직: 구조적 변곡점(Pivot) 역추적 (GAS getPivots 완벽 이식)
 def get_pivots(df, lookback=60, filter_size=3, gap=5, mode='low'):
     pivots = []
     prices = df['Low'] if mode == 'low' else df['High']
+    # 오늘 데이터(idx -1)는 형성 중이므로 -2부터 거꾸로 스캔
     for i in range(len(df) - 2, len(df) - lookback, -1):
         if i < filter_size or i >= len(df) - filter_size: continue
         is_pivot = True
@@ -55,30 +56,58 @@ def get_pivots(df, lookback=60, filter_size=3, gap=5, mode='low'):
             if len(pivots) == 2: break
     return pivots
 
-# 봇의 로직: 방향성 리테스트 감지 함수
-def check_directional_retest(df, pivots, label):
+# 봇의 로직: 구글 앱스 스크립트 v80의 checkTrueRetest 로직 이식
+def check_true_retest(df, pivots, label):
     if len(pivots) < 2: return None
     p2, p1 = pivots[0], pivots[1] 
     idx_now = len(df) - 1
-    cp, pp = float(df['Close'].iloc[-1]), float(df['Close'].iloc[-2])
+    cp = float(df['Low'].iloc[-1]) # 지지선은 Low 기준
+    
     m = (p2['val'] - p1['val']) / (p2['idx'] - p1['idx'])
     line_now = m * (idx_now - p1['idx']) + p1['val']
     margin = 0.015
 
-    if cp < line_now: # 이탈 리테스트
-        had_breakdown = any(df['Low'].iloc[-i] > (m * (idx_now - i - p1['idx']) + p1['val']) for i in range(2, 8))
+    if cp < line_now: # 선 아래에 있는 경우 (이탈 상태)
+        # 최근 7일 이내에 선 위에 있었는지 확인 (이탈 사건 추적)
+        had_breakdown = False
+        for i in range(2, 8):
+            line_past = m * (idx_now - i - p1['idx']) + p1['val']
+            if df['Low'].iloc[-i] > line_past:
+                had_breakdown = True; break
+        
         if had_breakdown and (line_now - cp) / line_now < margin:
-            if cp > pp: return f"🔄 {label} 이탈 후 저항 리테스트 중 (반등 시 매도 주의)"
-    elif cp >= line_now: # 지지 리테스트
-        had_breakout = any(df['Low'].iloc[-i] < (m * (idx_now - i - p1['idx']) + p1['val']) for i in range(2, 8))
-        dist = (cp - line_now) / line_now
-        if dist < margin:
-            if had_breakout: return f"✅ {label} 돌파 후 지지 확인 중 (진짜 리테스트 매수 타점)"
-            elif pp > cp: return f"🔄 {label} 눌림목 접근 중 (지지 여부 확인 필요)"
-            elif cp > pp: return f"💎 {label} 지지 성공 후 반등 중"
+            return f"🔄 주의: {label} 이탈 후 저항 리테스트 중 (매도 타점)"
+        return f"🚨 {label} 이탈 상태 (주의 요망)"
+    
+    # 선 위에 있는 경우 (v80에서는 별도 메시지 없었으나 필요 시 유지 가능)
     return None
 
-# 2. 분석 대상 종목 설정
+# 봇의 로직: 구글 앱스 스크립트 v80의 checkResistanceStatus 로직 이식
+def check_resistance_status(df, res_pivots):
+    if len(res_pivots) < 2: return None
+    p2, p1 = res_pivots[0], res_pivots[1]
+    idx_now = len(df) - 1
+    cp = float(df['Close'].iloc[-1])
+    m = (p2['val'] - p1['val']) / (p2['idx'] - p1['idx'])
+    res_line = m * (idx_now - p1['idx']) + p1['val']
+    margin = 0.015
+    
+    if cp > res_line: # 돌파 상태
+        # 최근 7일 이내에 선 아래에 있었는지 확인 (돌파 사건 추적)
+        had_breakout = False
+        for i in range(2, 8):
+            line_past = m * (idx_now - i - p1['idx']) + p1['val']
+            if df['Close'].iloc[-i] < line_past:
+                had_breakout = True; break
+        
+        if had_breakout and (cp - res_line) / res_line < margin:
+            return f"🔄 알림: 장기 저항 돌파 후 지지 리테스트 중 (강력 매수 타점)"
+        return f"🔥 장기 저항 돌파 상태입니다. 매수 고려!"
+    else: # 돌파 전
+        if (res_line - cp) / res_line < margin:
+            return f"🎯 돌파 대기: 장기 저항선에 근접했습니다. 돌파 여부를 주시하세요."
+    return None
+
 ticker_map = { 
     'NVDA': '엔비디아', 'AAPL': '애플', 'MSFT': '마이크로소프트', 'TSLA': '테슬라', 
     'AMZN': '아마존', 'META': '메타', 'GOOGL': '구글', 'AVGO': '브로드컴', 
@@ -94,7 +123,6 @@ if sent_alerts.get('date') != today_str:
 
 new_alerts = []
 
-# 3. 메인 분석 루프
 for symbol, name in ticker_map.items():
     try:
         df_d = yf.download(symbol, period='1y', interval='1d', progress=False)
@@ -103,15 +131,13 @@ for symbol, name in ticker_map.items():
         
         df_d['RSI'] = calculate_rsi(df_d['Close'])
         curr_p = float(df_d['Close'].iloc[-1])
-        idx_d = len(df_d) - 1
 
-        # --- 다이버전스 분석 로직 ---
+        # 1. 다이버전스 분석 (유저 요청: 그대로 유지)
         df_d['PH'] = df_d['High'][(df_d['High'] == df_d['High'].rolling(window=11, center=True).max())]
         df_d['PL'] = df_d['Low'][(df_d['Low'] == df_d['Low'].rolling(window=11, center=True).min())]
         pls = df_d.dropna(subset=['PL'])
         phs = df_d.dropna(subset=['PH'])
 
-        # 상승 다이버전스
         if len(pls) >= 2:
             l1, l2 = pls.iloc[-2], pls.iloc[-1]
             if l2['Low'] < l1['Low'] and l2['RSI'] > l1['RSI'] and curr_p > l2['Low']:
@@ -120,7 +146,6 @@ for symbol, name in ticker_map.items():
                     new_alerts.append(f"📈 {name}({symbol}): RSI 상승 다이버전스 출현!!")
                     sent_alerts['alerts'].append(sig_key)
 
-        # 하락 다이버전스
         if len(phs) >= 2:
             h1, h2 = phs.iloc[-2], phs.iloc[-1]
             if h2['High'] > h1['High'] and h2['RSI'] < h1['RSI'] and curr_p < h2['High']:
@@ -129,51 +154,34 @@ for symbol, name in ticker_map.items():
                     new_alerts.append(f"📉 {name}({symbol}): RSI 하락 다이버전스 출현!!")
                     sent_alerts['alerts'].append(sig_key)
 
-        # --- 봇의 로직 기반 지지선 분석 ---
+        # 2. 봇의 지지선 로직 (구글 v80 checkTrueRetest 방식)
         st_pivots = get_pivots(df_d, lookback=60, filter_size=3, gap=5, mode='low')
-        st_retest_msg = check_directional_retest(df_d, st_pivots, "단기 지지선")
-        if st_retest_msg:
+        st_msg = check_true_retest(df_d, st_pivots, "단기 지지선")
+        if st_msg:
             sig_key = f"{symbol}_ST_RETEST"
             if sig_key not in sent_alerts['alerts']:
-                new_alerts.append(f"🛡️ {name}({symbol}): {st_retest_msg}")
+                new_alerts.append(f"🛡️ {name}({symbol}): {st_msg}")
                 sent_alerts['alerts'].append(sig_key)
 
         lt_pivots = get_pivots(df_d, lookback=180, filter_size=15, gap=20, mode='low')
-        lt_retest_msg = check_directional_retest(df_d, lt_pivots, "장기 지지선")
-        if lt_retest_msg:
+        lt_msg = check_true_retest(df_d, lt_pivots, "장기 지지선")
+        if lt_msg:
             sig_key = f"{symbol}_LT_RETEST"
             if sig_key not in sent_alerts['alerts']:
-                new_alerts.append(f"🏰 {name}({symbol}): {lt_retest_msg}")
+                new_alerts.append(f"🏰 {name}({symbol}): {lt_msg}")
                 sent_alerts['alerts'].append(sig_key)
 
-        # --- 장기 저항선 분석 강화 (DELL 오류 해결 버전) ---
+        # 3. 봇의 저항선 로직 (구글 v80 checkResistanceStatus 방식)
         res_pivots = get_pivots(df_d, lookback=150, filter_size=15, gap=15, mode='high')
-        if len(res_pivots) >= 2:
-            p2, p1 = res_pivots[0], res_pivots[1]
-            m_res = (p2['val'] - p1['val']) / (p2['idx'] - p1['idx'])
-            res_line = m_res * (idx_d - p1['idx']) + p1['val']
-            
-            if curr_p > res_line:
-                had_breakout = any(df_d['Close'].iloc[-i] < (m_res * (idx_d - i - p1['idx']) + p1['val']) for i in range(2, 10))
-                if had_breakout and (curr_p - res_line) / res_line < 0.015:
-                    sig_key = f"{symbol}_RES_RETEST"
-                    if sig_key not in sent_alerts['alerts']:
-                        new_alerts.append(f"🔥 {name}({symbol}): 장기 저항 돌파 후 지지 리테스트 중!")
-                        sent_alerts['alerts'].append(sig_key)
-                elif had_breakout:
-                    sig_key = f"{symbol}_RES_BREAK"
-                    if sig_key not in sent_alerts['alerts']:
-                        new_alerts.append(f"🚀 {name}({symbol}): 장기 저항 돌파 성공!")
-                        sent_alerts['alerts'].append(sig_key)
-            elif (res_line - curr_p) / res_line < 0.015:
-                sig_key = f"{symbol}_RES_READY"
-                if sig_key not in sent_alerts['alerts']:
-                    new_alerts.append(f"🎯 {name}({symbol}): 장기 저항선 돌파 대기 중")
-                    sent_alerts['alerts'].append(sig_key)
+        res_msg = check_resistance_status(df_d, res_pivots)
+        if res_msg:
+            sig_key = f"{symbol}_RES_STATUS"
+            if sig_key not in sent_alerts['alerts']:
+                new_alerts.append(f"🎯 {name}({symbol}): {res_msg}")
+                sent_alerts['alerts'].append(sig_key)
 
     except Exception as e: continue
 
-# 4. 결과 전송
 if new_alerts:
     msg = "⚖️ 봇의 종합 추세 및 다이버전스 알림\n" + "-" * 20 + "\n" + "\n\n".join(new_alerts)
     send_message(msg)
