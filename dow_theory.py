@@ -3,22 +3,15 @@ import pandas as pd
 import requests
 import os
 
-# 깃허브 Secrets 정보 가져오기이다
 token = os.getenv('TELEGRAM_TOKEN')
 chat_id = os.getenv('TELEGRAM_CHAT_ID')
 
 def send_message(text):
-    if not token or not chat_id:
-        print("토큰이나 채팅 아이디 설정이 누락되었다이다")
-        return
+    if not token or not chat_id: return
     url = f"https://api.telegram.org/bot{token}/sendMessage"
     params = {'chat_id': chat_id, 'text': text, 'parse_mode': 'Markdown'}
-    try:
-        requests.get(url, params=params)
-    except Exception as e:
-        print(f"전송 중 오류 발생했다이다: {e}")
+    requests.get(url, params=params)
 
-# 요청하신 15개 핵심 종목 리스트이다
 ticker_map = {
     'NVDA': '엔비디아', 'AAPL': '애플', 'MSFT': '마이크로소프트', 'TSLA': '테슬라', 
     'AMZN': '아마존', 'META': '메타', 'GOOGL': '구글', 'AVGO': '브로드컴', 
@@ -27,56 +20,67 @@ ticker_map = {
     'PLTR': '팔란티어', 'MU': '마이크론', 'ORCL': '오라클', 'DELL': '델', 'QQQ': 'QQQ'
 }
 
-tickers = list(ticker_map.keys())
+# 결과 저장을 위한 딕셔너리이다
+results = {
+    'short_up': [], 'short_down': [],
+    'long_up': [], 'long_down': [],
+    'break_20': [], 'break_60': []
+}
 
-# 추세 및 돌파 분류 리스트이다
-uptrend_list = []
-downtrend_list = []
-neutral_list = []
-breakout_list = []
-
-for symbol in tickers:
-    name = ticker_map[symbol]
+for symbol, name in ticker_map.items():
     try:
-        # 데이터 다운로드이다
-        df = yf.download(symbol, period='2mo', interval='1d', progress=False)
-        if len(df) < 30: continue
-        if isinstance(df.columns, pd.MultiIndex):
-            df.columns = df.columns.get_level_values(0)
+        # 200일 이평선 계산을 위해 1년치 데이터를 가져온다이다
+        df = yf.download(symbol, period='1y', interval='1d', progress=False)
+        if len(df) < 200: continue
+        if isinstance(df.columns, pd.MultiIndex): df.columns = df.columns.get_level_values(0)
 
-        # 1. 다우 이론 추세 판독이다
-        recent = df.iloc[-5:] 
-        previous = df.iloc[-10:-5]
-        
-        curr_high = float(recent['High'].max())
-        curr_low = float(recent['Low'].min())
-        prev_high = float(previous['High'].max())
-        prev_low = float(previous['Low'].min())
+        curr_close = float(df['Close'].iloc[-1])
+        ma200 = df['Close'].rolling(window=200).mean().iloc[-1]
 
-        if curr_high > prev_high and curr_low > prev_low:
-            uptrend_list.append(name)
-        elif curr_high < prev_high and curr_low < prev_low:
-            downtrend_list.append(name)
-        else:
-            neutral_list.append(name)
+        # 1. 단기 추세 (5일 단위)이다
+        s_recent = df.iloc[-5:]
+        s_prev = df.iloc[-10:-5]
+        s_curr_h, s_curr_l = float(s_recent['High'].max()), float(s_recent['Low'].min())
+        s_prev_h, s_prev_l = float(s_prev['High'].max()), float(s_prev['Low'].min())
 
-        # 2. 전고점 돌파 확인이다 (20일 기준)
-        lookback_20 = df.iloc[-21:-1]
-        if float(df.iloc[-1]['Close']) > float(lookback_20['High'].max()):
-            breakout_list.append(name)
+        if s_curr_h > s_prev_h and s_curr_l > s_prev_l:
+            results['short_up'].append(name)
+        elif s_curr_h < s_prev_h and s_curr_l < s_prev_l:
+            results['short_down'].append(name)
 
-    except Exception as e:
-        print(f"{symbol} 분석 실패했다이다: {e}")
-        continue
+        # 2. 장기 추세 (20일 단위 + 200일선 필터)이다
+        l_recent = df.iloc[-20:]
+        l_prev = df.iloc[-40:-20]
+        l_curr_h, l_curr_l = float(l_recent['High'].max()), float(l_recent['Low'].min())
+        l_prev_h, l_prev_l = float(l_prev['High'].max()), float(l_prev['Low'].min())
 
-# 리포트 구성이다
-report = []
-report.append("🏛️ 다우 이론 실시간 추세 리포트이다")
-report.append("-" * 20)
-report.append(f"상승추세: {', '.join(uptrend_list) if uptrend_list else '없음'}")
-report.append(f"하락추세: {', '.join(downtrend_list) if downtrend_list else '없음'}")
-report.append(f"보합: {', '.join(neutral_list) if neutral_list else '없음'}")
-report.append("-" * 20)
-report.append(f"🔥 전고점 돌파: {', '.join(breakout_list) if breakout_list else '없음'}")
+        # 장기는 200일선 위에서 고점/저점이 모두 높아질 때만 상승으로 인정한다이다
+        if curr_close > ma200 and l_curr_h > l_prev_h and l_curr_l > l_prev_l:
+            results['long_up'].append(name)
+        elif curr_close < ma200 or (l_curr_h < l_prev_h and l_curr_l < l_prev_l):
+            results['long_down'].append(name)
+
+        # 3. 돌파 확인 (20일 단기 / 60일 장기)이다
+        high_20 = float(df.iloc[-21:-1]['High'].max())
+        high_60 = float(df.iloc[-61:-1]['High'].max())
+
+        if curr_close > high_20: results['break_20'].append(name)
+        if curr_close > high_60: results['break_60'].append(name)
+
+    except: continue
+
+# 리포트 생성이다
+report = ["🏛️ 통합 추세 및 다우 이론 리포트이다", "-" * 20]
+report.append("1. 장기 추세 (20일 & 200MA 기준)이다")
+report.append(f"🟢 상승 대세: {', '.join(results['long_up']) if results['long_up'] else '없음'}")
+report.append(f"🔴 하락/주의: {', '.join(results['long_down']) if results['long_down'] else '없음'}")
+report.append("")
+report.append("2. 단기 추세 (5일 기준)이다")
+report.append(f"📈 단기 상승: {', '.join(results['short_up']) if results['short_up'] else '없음'}")
+report.append(f"📉 단기 하락: {', '.join(results['short_down']) if results['short_down'] else '없음'}")
+report.append("")
+report.append("3. 가격 돌파 신호이다")
+report.append(f"🔥 장기(60일) 돌파: {', '.join(results['break_60']) if results['break_60'] else '없음'}")
+report.append(f"⚡ 단기(20일) 돌파: {', '.join(results['break_20']) if results['break_20'] else '없음'}")
 
 send_message("\n".join(report))
