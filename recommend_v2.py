@@ -20,11 +20,11 @@ ticker_map = {
     'PLTR': '팔란티어', 'MU': '마이크론', 'ORCL': '오라클', 'DELL': '델', 'QQQ': 'QQQ'
 }
 
-uptrend_gold = []    # 🚀 진짜 상승 추세이다
-consolidation_gold = [] # 💤 보합/횡보 중인 종목이다
+uptrend_gold = []
+consolidation_gold = []
 
-# 보합 필터 임계값 (2%)이다
-THRESHOLD = 0.02 
+# 10일 기준에 적합하도록 임계값을 0.5%로 대폭 낮춘다이다
+THRESHOLD = 0.005 
 
 for symbol, name in ticker_map.items():
     try:
@@ -32,23 +32,21 @@ for symbol, name in ticker_map.items():
         if len(df) < 50: continue
         if isinstance(df.columns, pd.MultiIndex): df.columns = df.columns.get_level_values(0)
 
-        # 지표 계산 (MA20, 7SMMA)이다
         df['MA20'] = df['Close'].rolling(window=20).mean()
         df['SMMA7'] = df['Close'].ewm(alpha=1/7, adjust=False).mean()
         
         curr = df.iloc[-1]
         c_p, c_ma20, c_smma7 = float(curr['Close']), float(curr['MA20']), float(curr['SMMA7'])
         
-        # 다우 이론: 기간을 10일(2주일)로 단축하여 민감도 향상이다
-        recent = df.iloc[-10:] # 최근 10일이다
-        prev = df.iloc[-20:-10] # 이전 10일이다
+        recent = df.iloc[-10:] 
+        prev = df.iloc[-20:-10] 
         c_h, c_l = float(recent['High'].max()), float(recent['Low'].min())
         p_h, p_l = float(prev['High'].max()), float(prev['Low'].min())
         
-        # 고점/저점이 이전 10일 대비 2% 이상 상승했는지 확인한다이다
+        # 0.5% 이상만 높아져도 상승 추세로 인정한다이다
         is_hh = c_h > p_h * (1 + THRESHOLD)
         is_hl = c_l > p_l * (1 + THRESHOLD)
-        is_gold = c_p > c_ma20 and c_smma7 > c_ma20 # 골든크로스 조건이다
+        is_gold = c_p > c_ma20 and c_smma7 > c_ma20
         
         recent_low = float(df['Low'].iloc[-10:].min())
         info = f"[{name} ({symbol})]\n현재가: {c_p:.2f}$\n진입가(7선): {c_smma7:.2f}$\n진입가(20선): {c_ma20:.2f}$\n손절가(저점): {recent_low:.2f}$"
@@ -57,21 +55,17 @@ for symbol, name in ticker_map.items():
             if is_hh and is_hl:
                 uptrend_gold.append("🚀 " + info)
             else:
-                # 2% 미만의 변화는 보합으로 분류한다이다
                 consolidation_gold.append("💤 " + info)
 
     except: continue
 
-report = "📢 민감형(10일 기준) 매수 전략 리포트이다\n" + "="*25 + "\n\n"
+report = "📢 민감형(임계값 0.5%) 매수 전략 리포트이다\n" + "="*25 + "\n\n"
 report += "🚀 진짜 상승추세 (10일 HH+HL 돌파)이다\n"
 report += "\n\n".join(uptrend_gold) if uptrend_gold else "해당 종목 없음이다"
 report += "\n\n" + "-"*25 + "\n\n"
 report += "💤 보합/횡보 중 (추세 대기 중)이다\n"
 report += "\n\n".join(consolidation_gold) if consolidation_gold else "해당 종목 없음이다"
 report += "\n\n" + "="*25 + "\n"
-
-report += "💡 투자 가이드이다\n"
-report += "1. 가장 안전한 타점: 🚀 그룹 종목이 7smma(7선)에 눌릴 때가 승률이 높다이다.\n"
-report += "2. 역전의 기회: 💤 그룹은 박스권 상단 2% 돌파 시 🚀로 전환된다이다."
+report += "💡 가이드: 마이크론처럼 꾸준히 오르는 종목을 잡으려면 임계값을 낮추는 게 유리하다이다"
 
 send_message(report)
