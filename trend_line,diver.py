@@ -105,12 +105,13 @@ for symbol, name in ticker_map.items():
         curr_p = float(df_d['Close'].iloc[-1])
         idx_d = len(df_d) - 1
 
-        # 다이버전스 분석
+        # --- 다이버전스 분석 로직 ---
         df_d['PH'] = df_d['High'][(df_d['High'] == df_d['High'].rolling(window=11, center=True).max())]
         df_d['PL'] = df_d['Low'][(df_d['Low'] == df_d['Low'].rolling(window=11, center=True).min())]
         pls = df_d.dropna(subset=['PL'])
         phs = df_d.dropna(subset=['PH'])
 
+        # 상승 다이버전스
         if len(pls) >= 2:
             l1, l2 = pls.iloc[-2], pls.iloc[-1]
             if l2['Low'] < l1['Low'] and l2['RSI'] > l1['RSI'] and curr_p > l2['Low']:
@@ -119,6 +120,7 @@ for symbol, name in ticker_map.items():
                     new_alerts.append(f"📈 {name}({symbol}): RSI 상승 다이버전스 출현!!")
                     sent_alerts['alerts'].append(sig_key)
 
+        # 하락 다이버전스
         if len(phs) >= 2:
             h1, h2 = phs.iloc[-2], phs.iloc[-1]
             if h2['High'] > h1['High'] and h2['RSI'] < h1['RSI'] and curr_p < h2['High']:
@@ -127,7 +129,7 @@ for symbol, name in ticker_map.items():
                     new_alerts.append(f"📉 {name}({symbol}): RSI 하락 다이버전스 출현!!")
                     sent_alerts['alerts'].append(sig_key)
 
-        # 봇의 로직 기반 지지선/저항선 리테스트 분석
+        # --- 봇의 로직 기반 지지선 분석 ---
         st_pivots = get_pivots(df_d, lookback=60, filter_size=3, gap=5, mode='low')
         st_retest_msg = check_directional_retest(df_d, st_pivots, "단기 지지선")
         if st_retest_msg:
@@ -144,19 +146,24 @@ for symbol, name in ticker_map.items():
                 new_alerts.append(f"🏰 {name}({symbol}): {lt_retest_msg}")
                 sent_alerts['alerts'].append(sig_key)
 
-        # 장기 저항선 돌파 및 대기 상태
-        res_pivots = get_pivots(df_d, lookback=120, filter_size=10, gap=10, mode='high')
+        # --- 장기 저항선 분석 강화 (DELL 오류 해결 버전) ---
+        res_pivots = get_pivots(df_d, lookback=150, filter_size=15, gap=15, mode='high')
         if len(res_pivots) >= 2:
             p2, p1 = res_pivots[0], res_pivots[1]
             m_res = (p2['val'] - p1['val']) / (p2['idx'] - p1['idx'])
             res_line = m_res * (idx_d - p1['idx']) + p1['val']
             
             if curr_p > res_line:
-                had_breakout = any(df_d['Close'].iloc[-i] < (m_res * (idx_d - i - p1['idx']) + p1['val']) for i in range(2, 8))
+                had_breakout = any(df_d['Close'].iloc[-i] < (m_res * (idx_d - i - p1['idx']) + p1['val']) for i in range(2, 10))
                 if had_breakout and (curr_p - res_line) / res_line < 0.015:
                     sig_key = f"{symbol}_RES_RETEST"
                     if sig_key not in sent_alerts['alerts']:
                         new_alerts.append(f"🔥 {name}({symbol}): 장기 저항 돌파 후 지지 리테스트 중!")
+                        sent_alerts['alerts'].append(sig_key)
+                elif had_breakout:
+                    sig_key = f"{symbol}_RES_BREAK"
+                    if sig_key not in sent_alerts['alerts']:
+                        new_alerts.append(f"🚀 {name}({symbol}): 장기 저항 돌파 성공!")
                         sent_alerts['alerts'].append(sig_key)
             elif (res_line - curr_p) / res_line < 0.015:
                 sig_key = f"{symbol}_RES_READY"
@@ -168,6 +175,6 @@ for symbol, name in ticker_map.items():
 
 # 4. 결과 전송
 if new_alerts:
-    msg = "⚖️ 봇의 추세선 및 다이버전스 알림\n" + "-" * 20 + "\n" + "\n\n".join(new_alerts)
+    msg = "⚖️ 봇의 종합 추세 및 다이버전스 알림\n" + "-" * 20 + "\n" + "\n\n".join(new_alerts)
     send_message(msg)
     save_sent_alerts(sent_alerts)
