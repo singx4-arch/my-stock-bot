@@ -168,6 +168,6 @@ for symbol, name in ticker_map.items():
 
 # 4. 결과 전송
 if new_alerts:
-    msg = "⚖️ 봇의 종합 추세 및 다이버전스 알림\n" + "-" * 20 + "\n" + "\n\n".join(new_alerts)
+    msg = "⚖️ 봇의 추세선 및 다이버전스 알림\n" + "-" * 20 + "\n" + "\n\n".join(new_alerts)
     send_message(msg)
     save_sent_alerts(sent_alerts)
