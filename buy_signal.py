@@ -13,11 +13,18 @@ def send_message(text):
     requests.get(url, params=params)
 
 ticker_map = {
-    'NVDA': '엔비디아', 'AAPL': '애플', 'MSFT': '마이크로소프트', 'TSLA': '테슬라', 
-    'AMZN': '아마존', 'META': '메타', 'GOOGL': '구글', 'AVGO': '브로드컴', 
-    'AMD': 'AMD', 'TSM': 'TSMC', 'ASML': 'ASML', 'COST': '코스트코', 
-    'QCOM': '퀄컴', 'ARM': 'ARM', 'TQQQ': '나스닥3배레버', 'SOXL': '반도체3배레버',
-    'PLTR': '팔란티어', 'MU': '마이크론', 'ORCL': '오라클', 'DELL': '델', 'QQQ': 'QQQ'
+    'NVDA': '엔비디아', 'TSLA': '테슬라', 'AAPL': '애플', 'MSFT': '마이크로소프트', 
+    'AMZN': '아마존', 'META': '메타', 'GOOGL': '구글', 'PLTR': '팔란티어', 
+    'MSTR': '마이크로스트래티지', 'COIN': '코인베이스', 'AMD': 'AMD', 'NFLX': '넷플릭스', 
+    'AVGO': '브로드컴', 'TQQQ': '나스닥3배레버', 'SOXL': '반도체3배레버', 'ARM': 'ARM', 
+    'TSM': 'TSMC', 'MU': '마이크론', 'INTC': '인텔', 'SMCI': '슈퍼마이크로', 
+    'PYPL': '페이팔', 'QQQ': '나스닥', 'PANW': '팔로알토', 
+    'COST': '코스트코', 'QCOM': '퀄컴', 'ASML': 'ASML', 'SNOW': '스노우플레이크', 
+    'MARA': '마라톤디지털', 'RIOT': '라이엇플랫폼', 'VRT': '버티브 홀딩스', 
+    'ANET': '아리스타 네트웍스', 'LLY': '일라이 릴리', 'NVO': '노보 노디스크', 'VST': '비스트라', 
+    'GEV': 'GE 베르노바', 'MRVL': '마벨 테크놀로지', 'LRCX': '램리서치', 'AUR': '오로라 이노베이션', 
+    'UBER': '우버', 'APP': '앱러빈', 'SAP': 'SAP', 'SOFI': '소파이', 'LMND': '레모네이드', 'ISRG': '인튜이티브 서지컬', 
+    'VRTX': '버텍스 파마슈티컬스', 'REGN': '리제네론', 'CLSK': '클린스파크', 'HOOD': '로빈후드'
 }
 
 def check_new_touch(df):
