@@ -1,4 +1,4 @@
-name: Market Divergence Monitor
+name: Market Divergence 알람
 
 on:
   schedule:
