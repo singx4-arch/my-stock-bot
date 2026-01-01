@@ -2,28 +2,18 @@ import yfinance as yf
 import pandas as pd
 import requests
 import os
+import numpy as np
+from datetime import datetime
 
-# 깃허브 Secrets 정보 가져오기이다
+# 텔레그램 설정이다
 token = os.getenv('TELEGRAM_TOKEN')
 chat_id = os.getenv('TELEGRAM_CHAT_ID')
 
 def send_message(text):
-    if not token or not chat_id:
-        print("토큰이나 채팅 아이디 설정이 누락되었다이다")
-        return
-    if len(text) > 4000: 
-        text = text[:4000] + "...(중략)"
-    
+    if not token or not chat_id: return
     url = f"https://api.telegram.org/bot{token}/sendMessage"
-    params = {
-        'chat_id': chat_id,
-        'text': text,
-        'parse_mode': 'Markdown'
-    }
-    try: 
-        requests.get(url, params=params)
-    except Exception as e: 
-        print(f"전송 중 오류 발생했다이다: {e}")
+    params = {'chat_id': chat_id, 'text': text}
+    requests.get(url, params=params)
 
 def calculate_rsi(data, window=14):
     delta = data.diff()
@@ -33,99 +23,93 @@ def calculate_rsi(data, window=14):
     return 100 - (100 / (1 + rs))
 
 ticker_map = {
+    'QQQ': '나스닥100', 'TQQQ': '나스닥3배', 'SOXL': '반도체3배',
     'NVDA': '엔비디아', 'TSLA': '테슬라', 'AAPL': '애플', 'MSFT': '마이크로소프트', 
     'AMZN': '아마존', 'META': '메타', 'GOOGL': '구글', 'PLTR': '팔란티어', 
-    'MSTR': '마이크로스트래티지', 'COIN': '코인베이스', 'AMD': 'AMD', 'NFLX': '넷플릭스', 
-    'AVGO': '브로드컴', 'TQQQ': '나스닥3배레버', 'SOXL': '반도체3배레버', 'ARM': 'ARM', 
-    'TSM': 'TSMC', 'MU': '마이크론', 'INTC': '인텔', 'SMCI': '슈퍼마이크로', 
-    'PYPL': '페이팔', 'SQQQ': '나스닥3배인버스', 'SOXS': '반도체3배인버스', 'PANW': '팔로알토', 
-    'COST': '코스트코', 'QCOM': '퀄컴', 'ASML': 'ASML', 'SNOW': '스노우플레이크', 
-    'MARA': '마라톤디지털', 'RIOT': '라이엇플랫폼', 'VRT': '버티브 홀딩스', 
-    'ANET': '아리스타 네트웍스', 'LLY': '일라이 릴리', 'NVO': '노보 노디스크', 'VST': '비스트라', 
-    'GEV': 'GE 베르노바', 'MRVL': '마벨 테크놀로지', 'LRCX': '램리서치', 'AUR': '오로라 이노베이션', 
-    'UBER': '우버', 'APP': '앱러빈', 'SAP': 'SAP', 'SOFI': '소파이', 'LMND': '레모네이드', 'ISRG': '인튜이티브 서지컬', 
-    'VRTX': '버텍스 파마슈티컬스', 'REGN': '리제네론', 'CLSK': '클린스파크', 'HOOD': '로빈후드'
+    'MSTR': 'MSTR', 'COIN': '코인베이스', 'AMD': 'AMD', 'AVGO': '브로드컴', 
+    'TSM': 'TSMC', 'MU': '마이크론', 'GLW': '코닝', 'LRCX': '램리서치',
+    'VST': '비스트라', 'CEG': '컨스텔레이션', 'IONQ': '아이온큐', 'ENPH': '엔페이즈'
 }
 
 tickers = list(ticker_map.keys())
 
-weekly_rsi_30_list = [] 
-support_smma7_list = [] 
-support_ma20_list = []  
-trend_reversal_list = [] # 장기 상승 추세 전환 리스트이다
-recommend_list = []
+# 결과 리스트 초기화이다
+rsi_bottom_list = []      # 1. 주봉 RSI 30 부근
+trend_reversal_list = []  # 2. 주봉 추세 전환 (완료/임박)
+top_recommend_list = []    # 3. 일봉 베스트 추천 (7SMMA & 20MA 상회)
 
 for symbol in tickers:
     name = ticker_map[symbol]
     try:
-        # 1. 일봉 분석이다
+        # 일봉 및 주봉 데이터 다운로드이다
         df_d = yf.download(symbol, period='1y', interval='1d', progress=False)
-        if df_d.empty or len(df_d) < 50: continue
-        if isinstance(df_d.columns, pd.MultiIndex): 
-            df_d.columns = df_d.columns.get_level_values(0)
-        
-        df_d['MA20'] = df_d['Close'].rolling(window=20).mean()
-        df_d['SMMA7'] = df_d['Close'].ewm(alpha=1/7, adjust=False).mean()
-        
-        curr = df_d.iloc[-1]
-        c_price = float(curr['Close'])
-        c_ma20 = float(curr['MA20'])
-        c_smma7 = float(curr['SMMA7'])
-
-        # 일봉 지지 로직이다
-        is_near_smma7 = abs(c_price - c_smma7) / c_smma7 <= 0.01
-        if is_near_smma7 and c_price >= c_smma7:
-            support_smma7_list.append(f"{name}({symbol})")
-
-        is_near_ma20 = abs(c_price - c_ma20) / c_ma20 <= 0.01
-        if c_price < c_smma7 and is_near_ma20 and c_price >= c_ma20:
-            support_ma20_list.append(f"{name}({symbol})")
-
-        # 2. 주봉 분석 (추세 전환 확인)이다
         df_w = yf.download(symbol, period='2y', interval='1wk', progress=False)
-        if not df_w.empty and len(df_w) >= 25:
-            if isinstance(df_w.columns, pd.MultiIndex): 
-                df_w.columns = df_w.columns.get_level_values(0)
-            
-            df_w['WRSI'] = calculate_rsi(df_w['Close'])
-            df_w['WSMMA7'] = df_w['Close'].ewm(alpha=1/7, adjust=False).mean()
-            df_w['WMA20'] = df_w['Close'].rolling(window=20).mean()
-            
-            w_curr = df_w.iloc[-1]
-            w_prev = df_w.iloc[-2] # 지난주 데이터이다
+        
+        if df_d.empty or df_w.empty: continue
+        if isinstance(df_d.columns, pd.MultiIndex): df_d.columns = df_d.columns.get_level_values(0)
+        if isinstance(df_w.columns, pd.MultiIndex): df_w.columns = df_w.columns.get_level_values(0)
 
-            # 주봉 골든크로스 판독 (7SMMA가 20MA를 상향 돌파)이다
-            w_c_smma = float(w_curr['WSMMA7'])
-            w_c_ma20 = float(w_curr['WMA20'])
-            w_p_smma = float(w_prev['WSMMA7'])
-            w_p_ma20 = float(w_prev['WMA20'])
+        # 1. 주봉 RSI 분석 (대바닥권)이다
+        df_w['WRSI'] = calculate_rsi(df_w['Close'])
+        current_wrsi = float(df_w['WRSI'].iloc[-1])
+        if 25 <= current_wrsi <= 38: # 30 부근 여유 범위이다
+            rsi_bottom_list.append(f"{name}({symbol})")
 
-            # 이번주에는 위에 있고, 지난주에는 아래에 있었다면 골든크로스이다
-            if w_c_smma > w_c_ma20 and w_p_smma <= w_p_ma20:
-                trend_reversal_list.append(f"{name}({symbol})")
+        # 2. 주봉 추세 전환 분석 (골든크로스 및 0.15% 근접)이다
+        df_w['WSMMA7'] = df_w['Close'].ewm(alpha=1/7, adjust=False).mean()
+        df_w['WMA20'] = df_w['Close'].rolling(window=20).mean()
+        
+        w_c_s7 = float(df_w['WSMMA7'].iloc[-1])
+        w_c_m20 = float(df_w['WMA20'].iloc[-1])
+        w_p_s7 = float(df_w['WSMMA7'].iloc[-2])
+        w_p_m20 = float(df_w['WMA20'].iloc[-2])
+        
+        # 주봉 이격률 계산이다
+        w_gap = (w_c_s7 - w_c_m20) / w_c_m20
+        
+        # 골든크로스 완료 혹은 임박(0.15% 이내)이다
+        is_w_gold = (w_p_s7 <= w_p_m20 and w_c_s7 > w_c_m20)
+        is_w_imminent = (w_c_s7 <= w_c_m20) and (abs(w_gap) <= 0.0015)
+        
+        if is_w_gold:
+            trend_reversal_list.append(f"{name}({symbol}) [전환완료]")
+        elif is_w_imminent:
+            trend_reversal_list.append(f"{name}({symbol}) [전환임박]")
 
-            # 주봉 RSI 30 부근 감지이다
-            if 28 <= float(w_curr['WRSI']) <= 35:
-                weekly_rsi_30_list.append(f"{name}({symbol})")
-
-        # 3. 매수 추천 로직이다
-        if c_price > c_ma20 and c_smma7 > c_ma20:
-            recommend_list.append(f"{name}({symbol})")
+        # 3. 일봉 기준 매수 추천 (정배열 필터링)이다
+        df_d['SMMA7'] = df_d['Close'].ewm(alpha=1/7, adjust=False).mean()
+        df_d['MA20'] = df_d['Close'].rolling(window=20).mean()
+        
+        c_price = float(df_d['Close'].iloc[-1])
+        c_s7 = float(df_d['SMMA7'].iloc[-1])
+        c_m20 = float(df_d['MA20'].iloc[-1])
+        
+        # 가격이 7SMMA와 20MA 위에 있고, 7SMMA가 20MA 위에 있는 정배열 종목이다
+        if c_price > c_s7 and c_price > c_m20 and c_s7 > c_m20:
+            top_recommend_list.append(f"{name}({symbol})")
 
     except Exception as e:
-        print(f"{symbol} 분석 실패했다이다: {e}")
+        print(f"{symbol} 분석 중 오류 발생했다이다: {e}")
         continue
 
 # 리포트 구성이다
-report = []
-report.append("📢 매수와 매도는 개인의 책임입니다.")
-report.append("-" * 20)
-report.append("1. 주봉 RSI 30 부근 (대바닥권):")
-report.append(", ".join(weekly_rsi_30_list) if weekly_rsi_30_list else "없음")
-report.append("\n4. 장기 상승 추세 전환 종목 (주봉 골든크로스):")
-report.append(", ".join(trend_reversal_list) if trend_reversal_list else "없음")
-report.append("-" * 20)
-report.append("💡 오늘의 매수 추천 종목:")
-report.append(", ".join(recommend_list) if recommend_list else "없음")
+report = f"🏛️ 주간/일간 통합 기술 분석 리포트\n"
+report += f"분석 일시: {datetime.now().strftime('%Y-%m-%d %H:%M')}\n"
+report += "-" * 25 + "\n\n"
 
-send_message("\n".join(report))
+report += "■ 1. 주봉 RSI 30 부근 (과매도 대바닥)\n"
+report += ", ".join(rsi_bottom_list) if rsi_bottom_list else "해당 종목 없음"
+report += "\n\n"
+
+report += "■ 2. 주봉 추세 전환 (골든크로스 완료/임박)\n"
+report += ", ".join(trend_reversal_list) if trend_reversal_list else "해당 종목 없음"
+report += "\n\n"
+
+report += "■ 3. 일봉 베스트 추천 (20일선+7SMMA 상회)\n"
+report += ", ".join(top_recommend_list) if top_recommend_list else "해당 종목 없음"
+report += "\n\n"
+
+report += "-" * 25 + "\n"
+report += "모든 투자의 책임은 본인에게 있다이다."
+
+send_message(report)
