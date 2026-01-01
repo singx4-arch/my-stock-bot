@@ -63,6 +63,14 @@ def main():
     else:
         last_alerts = {}
 
+    # 유형별 이모지 및 접두사 설정이다
+    emoji_map = {
+        '일반 상승 (바닥 반전)': '🆘 [강력 매수/바닥 포착]',
+        '히든 상승 (추세 지속)': '📈 [추세 지속/눌림목]',
+        '일반 하락 (천장 반전)': '🚨 [위험/천장 하락주의]',
+        '히든 하락 (추세 하락)': '📉 [하락 지속/탈출권고]'
+    }
+
     ticker_map = {
         'QQQ': '나스닥100', 'TQQQ': '나스닥3배', 'SOXL': '반도체3배', 'SPY': 'S&P500',
         'NVDA': '엔비디아', 'TSM': 'TSMC', 'AVGO': '브로드컴', 'ASML': 'ASML', 
@@ -88,7 +96,9 @@ def main():
             
             if res and last_alerts.get(symbol) != res:
                 curr_rsi = round(df['RSI_9'].iloc[-1], 2)
-                msg = f"🔔 [NEW] {name}({symbol})\n유형: {res}\nRSI: {curr_rsi}"
+                # 설정한 이모지 맵에서 문구를 가져온다이다
+                title = emoji_map.get(res, '🔔 [신호 발생]')
+                msg = f"{title}\n\n종목: {name}({symbol})\n유형: {res}\nRSI: {curr_rsi}"
                 send_message(msg)
                 new_alerts[symbol] = res
             elif not res:
