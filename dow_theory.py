@@ -39,7 +39,8 @@ ticker_map = {
     'COIN': '코인베이스', 'AMD': 'AMD', 'AVGO': '브로드컴', 'TSM': 'TSMC', 'MU': '마이크론'
 }
 
-groups = {'🚀슈퍼': [], '💎눌림': [], '📦대기': [], '🚨위험': []}
+# 종목군 구성에 하락추세 필드를 추가했다이다
+groups = {'🚀슈퍼': [], '💎눌림': [], '📉하락추세': [], '📦대기': [], '🚨위험': []}
 
 for symbol, name in ticker_map.items():
     try:
@@ -58,14 +59,14 @@ for symbol, name in ticker_map.items():
         curr_ma20 = float(df['MA20'].iloc[-1])
         curr_ma60 = float(df['MA60'].iloc[-1])
         
-        # 0.15% 근접도 계산 로직 추가다
+        # 0.15% 근접도 계산이다
         gap_ratio = (curr_smma7 - curr_ma20) / curr_ma20
         
-        # 완전 정배열 확인 (근접 조건 미해당 시)
-        is_bullish_alignment = (curr_smma7 > curr_ma20 > curr_ma60) and (gap_ratio > 0.0015)
-        
-        # 데드크로스 판별: 실제 교차했거나, 0.15% 이내로 근접했거나
+        # 데드크로스 판별 (실제 교차 또는 0.15% 이내 근접)이다
         is_dead_cross = (curr_smma7 < curr_ma20) or (0 <= gap_ratio <= 0.0015)
+        
+        # 정배열 확인 (데드크로스 조건이 아닐 때만 유지)이다
+        is_bullish_alignment = (curr_smma7 > curr_ma20 > curr_ma60) and not is_dead_cross
         
         low_pivots = get_structural_pivots(df, mode='low')
         high_pivots = get_structural_pivots(df, mode='high')
@@ -77,17 +78,18 @@ for symbol, name in ticker_map.items():
         is_breakout = curr_p > high_pivots[0]['val']
         is_hl = low_pivots[0]['val'] > low_pivots[1]['val']
         
-        # 정보 문구 구성이다
+        # 문구 구성이다
         info = f"{name}({symbol}): {curr_p:.1f}$ (+{dist_to_sup:.1f}%)"
         if is_bullish_alignment:
             info += " 🔥"
-        if is_dead_cross:
-            info += " (데드크로스/하락 가능성 큼)"
 
-        # 그룹 판별 로직(v113)이다
+        # 그룹 판별 로직 수정이다
         if curr_p < support:
             groups['🚨위험'].append(info)
-        elif is_breakout and not is_dead_cross:
+        elif is_dead_cross:
+            # 지지선은 지키고 있으나 추세가 꺾인 경우이다
+            groups['📉하락추세'].append(info)
+        elif is_breakout:
             groups['🚀슈퍼'].append(info)
         elif is_hl:
             groups['💎눌림'].append(info)
@@ -96,8 +98,8 @@ for symbol, name in ticker_map.items():
 
     except: continue
 
-report = f"🏛️ 다우 구조 및 데드크로스 분석 리포트 (v113)\n" + "="*25 + "\n\n"
-report += "💡 가이드: 🔥는 정배열 상태, 데드크로스 문구는 단기 추세 약화를 의미한다이다.\n\n"
+report = f"🏛️ 다우 구조 및 데드크로스 분석 리포트 (v114)\n" + "="*25 + "\n\n"
+report += "💡 가이드: 🔥는 정배열 상태, 📉하락추세는 데드크로스 발생 또는 임박을 의미한다이다.\n\n"
 
 for key, stocks in groups.items():
     report += f"{key} 종목군\n"
