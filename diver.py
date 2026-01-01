@@ -5,7 +5,7 @@ import os
 import numpy as np
 from datetime import datetime
 
-# 1. 환경 설정 및 텔레그램 연결이다
+# 1. 환경 설정이다
 token = os.getenv('TELEGRAM_TOKEN') or '7971022798:AAFGQR1zxdCq1urZKgdRzjjsvr3Lt6T9y1I'
 chat_id = os.getenv('TELEGRAM_CHAT_ID')
 
@@ -15,8 +15,7 @@ def send_message(text):
     params = {'chat_id': chat_id, 'text': text}
     try:
         requests.get(url, params=params, timeout=10)
-    except:
-        pass
+    except: pass
 
 def calculate_rsi(data, window=14):
     delta = data.diff()
@@ -25,19 +24,7 @@ def calculate_rsi(data, window=14):
     rs = gain / loss
     return 100 - (100 / (1 + rs))
 
-# OBV(온밸런스 볼륨) 계산 함수이다
-def calculate_obv(df):
-    obv = [0]
-    for i in range(1, len(df)):
-        if df['Close'].iloc[i] > df['Close'].iloc[i-1]:
-            obv.append(obv[-1] + df['Volume'].iloc[i])
-        elif df['Close'].iloc[i] < df['Close'].iloc[i-1]:
-            obv.append(obv[-1] - df['Volume'].iloc[i])
-        else:
-            obv.append(obv[-1])
-    return pd.Series(obv, index=df.index)
-
-def find_swings(series, window=3, mode='low'): # 감도를 window=3으로 높였다이다
+def find_swings(series, window=3, mode='low'):
     swings = []
     for i in range(window, len(series) - window):
         is_swing = True
@@ -52,8 +39,8 @@ def find_swings(series, window=3, mode='low'): # 감도를 window=3으로 높였
             swings.append(i)
     return swings
 
-# 2. 거래량 기반 신호 보정 엔진이다
-def run_divergence_v132():
+# 2. 고도화된 분석 엔진이다
+def run_analysis_v133():
     ticker_map = {
         'QQQ': '나스닥100', 'TQQQ': '나스닥3배', 'SOXL': '반도체3배',
         'NVDA': '엔비디아', 'TSLA': '테슬라', 'AAPL': '애플', 'MSFT': '마이크로소프트',
@@ -61,70 +48,79 @@ def run_divergence_v132():
         'TSM': 'TSMC', 'MU': '마이크론', 'GLW': '코닝', 'IONQ': '아이온큐'
     }
 
-    results = {
-        '일반 상승 (바닥 반전)': [],
-        '히든 상승 (추세 지속)': [],
-        '일반 하락 (고점 반전)': [],
-        '히든 하락 (추세 하락)': []
+    final_groups = {
+        '🚨 강력 하락 주의 (일반 하락)': [],
+        '🆘 진바닥 포착 (일반 상승)': [],
+        '📈 추세 강화 (히든 상승)': [],
+        '📉 조정 경고 (히든 하락)': [],
+        '🔄 신호 충돌 (변곡점 주의)': []
     }
 
     for symbol, name in ticker_map.items():
         try:
             df = yf.download(symbol, period='1y', interval='1d', progress=False)
-            if len(df) < 50: continue
+            if len(df) < 60: continue
             if isinstance(df.columns, pd.MultiIndex): df.columns = df.columns.get_level_values(0)
             
             df['RSI'] = calculate_rsi(df['Close'])
-            df['OBV'] = calculate_obv(df)
-            df = df.dropna()
-
+            avg_vol = df['Volume'].rolling(window=20).mean().iloc[-1]
+            curr_vol = df['Volume'].rolling(window=5).mean().iloc[-1]
+            
             low_idx = find_swings(df['Low'], window=3, mode='low')
             high_idx = find_swings(df['High'], window=3, mode='high')
             
-            # 거래량 에너지 확인 (최근 5일 평균 거래량 vs 20일 평균)이다
-            avg_vol_20 = df['Volume'].rolling(window=20).mean().iloc[-1]
-            curr_vol_5 = df['Volume'].rolling(window=5).mean().iloc[-1]
-            vol_power = " (거래량 동반)" if curr_vol_5 > avg_vol_20 else ""
+            sigs = [] # 발견된 신호들을 임시 저장한다이다
 
             # 상승 계열 분석이다
             if len(low_idx) >= 2:
                 i1, i2 = low_idx[-2], low_idx[-1]
                 p1, p2, r1, r2 = df['Low'].iloc[i1], df['Low'].iloc[i2], df['RSI'].iloc[i1], df['RSI'].iloc[i2]
-                
-                if p2 < p1 and r2 > r1 and r1 <= 35:
-                    results['일반 상승 (바닥 반전)'].append(f"- {name}({symbol}){vol_power}")
-                elif p2 > p1 and r2 < r1:
-                    results['히든 상승 (추세 지속)'].append(f"- {name}({symbol}){vol_power}")
+                if p2 < p1 and r2 > r1 and r1 <= 38: sigs.append('REG_BULL')
+                elif p2 > p1 and r2 < r1: sigs.append('HID_BULL')
 
             # 하락 계열 분석이다
             if len(high_idx) >= 2:
                 i1, i2 = high_idx[-2], high_idx[-1]
                 p1, p2, r1, r2 = df['High'].iloc[i1], df['High'].iloc[i2], df['RSI'].iloc[i1], df['RSI'].iloc[i2]
-                
-                if p2 > p1 and r2 < r1 and r1 >= 65:
-                    results['일반 하락 (고점 반전)'].append(f"- {name}({symbol}){vol_power}")
-                elif p2 < p1 and r2 > r1:
-                    # 히든 하락이지만 거래량이 강력하면 리포트에서 제외하거나 경고를 완화한다이다
-                    if curr_vol_5 < avg_vol_20:
-                        results['히든 하락 (추세 하락)'].append(f"- {name}({symbol}) (거래량 부족)")
-                    else:
-                        # 거래량이 실린 경우 저항 돌파 시도로 보고 박스권 대기로 분류 가능하다이다
-                        pass
+                if p2 > p1 and r2 < r1 and r1 >= 62: sigs.append('REG_BEAR')
+                elif p2 < p1 and r2 > r1: sigs.append('HID_BEAR')
+
+            # 신호 필터링 및 우선순위 결정이다
+            curr_p = df['Close'].iloc[-1]
+            vol_msg = " (거래량 동반)" if curr_vol > avg_vol else ""
+            info = f"- {name}({symbol}){vol_msg}"
+
+            if 'REG_BEAR' in sigs and 'HID_BULL' in sigs:
+                # 테슬라 케이스: 고점 저항선 부근이면 하락을 우선한다이다
+                res_line = df['High'].iloc[high_idx[-1]]
+                if abs(curr_p - res_line) / res_line < 0.03:
+                    final_groups['🚨 강력 하락 주의 (일반 하락)'].append(info + " (고점 저항 근접)")
+                else:
+                    final_groups['🔄 신호 충돌 (변곡점 주의)'].append(info)
+            elif 'REG_BEAR' in sigs:
+                final_groups['🚨 강력 하락 주의 (일반 하락)'].append(info)
+            elif 'REG_BULL' in sigs:
+                final_groups['🆘 진바닥 포착 (일반 상승)'].append(info)
+            elif 'HID_BULL' in sigs:
+                final_groups['📈 추세 강화 (히든 상승)'].append(info)
+            elif 'HID_BEAR' in sigs:
+                # 엔비디아 케이스: 거래량이 실린 히든 하락은 돌파 시도로 보고 제외한다이다
+                if curr_vol < avg_vol:
+                    final_groups['📉 조정 경고 (히든 하락)'].append(info)
 
         except: continue
 
-    report = "🔍 거래량 보정 다이버전스 리포트 (v132)\n"
+    report = "🏛️ 정밀 마켓 구조 분석 리포트 (v133)\n"
     report += f"분석 일시: {datetime.now().strftime('%Y-%m-%d %H:%M')}\n"
-    report += "------------------------------\n\n"
+    report += "-" * 30 + "\n\n"
 
-    for title, stocks in results.items():
+    for title, stocks in final_groups.items():
         report += f"■ {title}\n"
         report += "\n".join(stocks) if stocks else "- 해당 없음"
         report += "\n\n"
 
-    report += "------------------------------\n"
-    report += "거래량이 실린 하락 신호는 돌파 시도로 해석한다이다."
+    report += "-" * 30 + "\n테슬라와 같은 신호 충돌은 저항선 기준으로 재분류했다이다."
     send_message(report)
 
 if __name__ == "__main__":
-    run_divergence_v132()
+    run_analysis_v133()
