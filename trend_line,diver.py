@@ -7,7 +7,7 @@ import json
 from datetime import datetime
 
 # 1. 환경 설정 및 세션 로드
-token = os.getenv('TELEGRAM_TOKEN')
+token = os.getenv('TELEGRAM_TOKEN') or '7971022798:AAFGQR1zxdCq1urZKgdRzjjsvr3Lt6T9y1I'
 chat_id = os.getenv('TELEGRAM_CHAT_ID')
 SENT_ALERTS_FILE = 'sent_alerts.json'
 
@@ -25,7 +25,7 @@ def save_sent_alerts(sent_alerts):
 def send_message(text):
     if not token or not chat_id: return
     url = f"https://api.telegram.org/bot{token}/sendMessage"
-    params = {'chat_id': chat_id, 'text': text, 'parse_mode': 'Markdown'}
+    params = {'chat_id': chat_id, 'text': text} # 마크다운은 특수문자 오류가 잦아 일반 텍스트로 보낸다이다
     requests.get(url, params=params)
 
 def calculate_rsi(data, window=14):
@@ -35,11 +35,57 @@ def calculate_rsi(data, window=14):
     rs = gain / loss
     return 100 - (100 / (1 + rs))
 
-# 봇의 로직: 구조적 변곡점(Pivot) 역추적 (GAS getPivots 완벽 이식)
+# 전문가 방식: 피벗 포인트를 이용한 다이버전스 감지 함수이다
+def detect_divergence(df, window=5):
+    # window는 좌우 몇 개의 캔들보다 높거나 낮아야 하는지를 결정한다이다
+    bull_div = False
+    bear_div = False
+    
+    # 최근 2개의 저점/고점 피벗을 찾는다이다
+    low_pivots = []
+    high_pivots = []
+    
+    # 캔들 끝부분(최근 캔들)부터 역순으로 스캔하여 피벗을 탐색한다이다
+    for i in range(len(df) - window - 1, window, -1):
+        # 저점 피벗 확인 (Low 기준)
+        is_low_pivot = True
+        for j in range(1, window + 1):
+            if df['Low'].iloc[i] >= df['Low'].iloc[i-j] or df['Low'].iloc[i] >= df['Low'].iloc[i+j]:
+                is_low_pivot = False; break
+        if is_low_pivot:
+            low_pivots.append(i)
+        
+        # 고점 피벗 확인 (High 기준)
+        is_high_pivot = True
+        for j in range(1, window + 1):
+            if df['High'].iloc[i] <= df['High'].iloc[i-j] or df['High'].iloc[i] <= df['High'].iloc[i+j]:
+                is_high_pivot = False; break
+        if is_high_pivot:
+            high_pivots.append(i)
+            
+        if len(low_pivots) >= 2 and len(high_pivots) >= 2: break
+
+    # 일반 상승 다이버전스 (Regular Bullish): 가격 저점 낮아짐 + RSI 저점 높아짐
+    if len(low_pivots) >= 2:
+        p1, p2 = low_pivots[1], low_pivots[0] # p1이 과거, p2가 최근
+        if df['Low'].iloc[p2] < df['Low'].iloc[p1] and df['RSI'].iloc[p2] > df['RSI'].iloc[p1]:
+            # 마지막 캔들이 최근 피벗 이후 반등 중인지 확인한다이다
+            if df['Close'].iloc[-1] > df['Low'].iloc[p2]:
+                bull_div = True
+                
+    # 일반 하락 다이버전스 (Regular Bearish): 가격 고점 높아짐 + RSI 고점 낮아짐
+    if len(high_pivots) >= 2:
+        p1, p2 = high_pivots[1], high_pivots[0]
+        if df['High'].iloc[p2] > df['High'].iloc[p1] and df['RSI'].iloc[p2] < df['RSI'].iloc[p1]:
+            if df['Close'].iloc[-1] < df['High'].iloc[p2]:
+                bear_div = True
+                
+    return bull_div, bear_div
+
+# 기존 추세선 로직들이다 (수정 없이 유지)
 def get_pivots(df, lookback=60, filter_size=3, gap=5, mode='low'):
     pivots = []
     prices = df['Low'] if mode == 'low' else df['High']
-    # 오늘 데이터(idx -1)는 형성 중이므로 -2부터 거꾸로 스캔
     for i in range(len(df) - 2, len(df) - lookback, -1):
         if i < filter_size or i >= len(df) - filter_size: continue
         is_pivot = True
@@ -56,33 +102,25 @@ def get_pivots(df, lookback=60, filter_size=3, gap=5, mode='low'):
             if len(pivots) == 2: break
     return pivots
 
-# 봇의 로직: 구글 앱스 스크립트 v80의 checkTrueRetest 로직 이식
 def check_true_retest(df, pivots, label):
     if len(pivots) < 2: return None
     p2, p1 = pivots[0], pivots[1] 
     idx_now = len(df) - 1
-    cp = float(df['Low'].iloc[-1]) # 지지선은 Low 기준
-    
+    cp = float(df['Low'].iloc[-1])
     m = (p2['val'] - p1['val']) / (p2['idx'] - p1['idx'])
     line_now = m * (idx_now - p1['idx']) + p1['val']
     margin = 0.015
-
-    if cp < line_now: # 선 아래에 있는 경우 (이탈 상태)
-        # 최근 7일 이내에 선 위에 있었는지 확인 (이탈 사건 추적)
+    if cp < line_now:
         had_breakdown = False
         for i in range(2, 8):
             line_past = m * (idx_now - i - p1['idx']) + p1['val']
             if df['Low'].iloc[-i] > line_past:
                 had_breakdown = True; break
-        
         if had_breakdown and (line_now - cp) / line_now < margin:
             return f"🔄 주의: {label} 이탈 후 저항 리테스트 중 (매도 타점)"
         return f"🚨 {label} 이탈 상태 (주의 요망)"
-    
-    # 선 위에 있는 경우 (v80에서는 별도 메시지 없었으나 필요 시 유지 가능)
     return None
 
-# 봇의 로직: 구글 앱스 스크립트 v80의 checkResistanceStatus 로직 이식
 def check_resistance_status(df, res_pivots):
     if len(res_pivots) < 2: return None
     p2, p1 = res_pivots[0], res_pivots[1]
@@ -91,19 +129,16 @@ def check_resistance_status(df, res_pivots):
     m = (p2['val'] - p1['val']) / (p2['idx'] - p1['idx'])
     res_line = m * (idx_now - p1['idx']) + p1['val']
     margin = 0.015
-    
-    if cp > res_line: # 돌파 상태
-        # 최근 7일 이내에 선 아래에 있었는지 확인 (돌파 사건 추적)
+    if cp > res_line:
         had_breakout = False
         for i in range(2, 8):
             line_past = m * (idx_now - i - p1['idx']) + p1['val']
             if df['Close'].iloc[-i] < line_past:
                 had_breakout = True; break
-        
         if had_breakout and (cp - res_line) / res_line < margin:
             return f"🔄 알림: 장기 저항 돌파 후 지지 리테스트 중 (강력 매수 타점)"
         return f"🔥 장기 저항 돌파 상태입니다. 매수 고려!"
-    else: # 돌파 전
+    else:
         if (res_line - cp) / res_line < margin:
             return f"🎯 돌파 대기: 장기 저항선에 근접했습니다. 돌파 여부를 주시하세요."
     return None
@@ -130,31 +165,23 @@ for symbol, name in ticker_map.items():
         if isinstance(df_d.columns, pd.MultiIndex): df_d.columns = df_d.columns.get_level_values(0)
         
         df_d['RSI'] = calculate_rsi(df_d['Close'])
-        curr_p = float(df_d['Close'].iloc[-1])
+        
+        # 1. 전문가급 다이버전스 분석 적용이다
+        bull_div, bear_div = detect_divergence(df_d, window=5)
+        
+        if bull_div:
+            sig_key = f"{symbol}_BULL_DIV"
+            if sig_key not in sent_alerts['alerts']:
+                new_alerts.append(f"📈 {name}({symbol}): [전문가] RSI 상승 다이버전스 포착!!")
+                sent_alerts['alerts'].append(sig_key)
+        
+        if bear_div:
+            sig_key = f"{symbol}_BEAR_DIV"
+            if sig_key not in sent_alerts['alerts']:
+                new_alerts.append(f"📉 {name}({symbol}): [전문가] RSI 하락 다이버전스 포착!!")
+                sent_alerts['alerts'].append(sig_key)
 
-        # 1. 다이버전스 분석 (유저 요청: 그대로 유지)
-        df_d['PH'] = df_d['High'][(df_d['High'] == df_d['High'].rolling(window=11, center=True).max())]
-        df_d['PL'] = df_d['Low'][(df_d['Low'] == df_d['Low'].rolling(window=11, center=True).min())]
-        pls = df_d.dropna(subset=['PL'])
-        phs = df_d.dropna(subset=['PH'])
-
-        if len(pls) >= 2:
-            l1, l2 = pls.iloc[-2], pls.iloc[-1]
-            if l2['Low'] < l1['Low'] and l2['RSI'] > l1['RSI'] and curr_p > l2['Low']:
-                sig_key = f"{symbol}_BULL_DIV"
-                if sig_key not in sent_alerts['alerts']:
-                    new_alerts.append(f"📈 {name}({symbol}): RSI 상승 다이버전스 출현!!")
-                    sent_alerts['alerts'].append(sig_key)
-
-        if len(phs) >= 2:
-            h1, h2 = phs.iloc[-2], phs.iloc[-1]
-            if h2['High'] > h1['High'] and h2['RSI'] < h1['RSI'] and curr_p < h2['High']:
-                sig_key = f"{symbol}_BEAR_DIV"
-                if sig_key not in sent_alerts['alerts']:
-                    new_alerts.append(f"📉 {name}({symbol}): RSI 하락 다이버전스 출현!!")
-                    sent_alerts['alerts'].append(sig_key)
-
-        # 2. 봇의 지지선 로직 (구글 v80 checkTrueRetest 방식)
+        # 2 & 3. 추세선 및 저항선 로직 실행이다
         st_pivots = get_pivots(df_d, lookback=60, filter_size=3, gap=5, mode='low')
         st_msg = check_true_retest(df_d, st_pivots, "단기 지지선")
         if st_msg:
@@ -171,7 +198,6 @@ for symbol, name in ticker_map.items():
                 new_alerts.append(f"🏰 {name}({symbol}): {lt_msg}")
                 sent_alerts['alerts'].append(sig_key)
 
-        # 3. 봇의 저항선 로직 (구글 v80 checkResistanceStatus 방식)
         res_pivots = get_pivots(df_d, lookback=150, filter_size=15, gap=15, mode='high')
         res_msg = check_resistance_status(df_d, res_pivots)
         if res_msg:
@@ -183,6 +209,6 @@ for symbol, name in ticker_map.items():
     except Exception as e: continue
 
 if new_alerts:
-    msg = "⚖️ 봇의 종합 추세 및 다이버전스 알림\n" + "-" * 20 + "\n" + "\n\n".join(new_alerts)
+    msg = "⚖️ 봇의 종합 추세 및 전문가 다이버전스 알림\n" + "-" * 20 + "\n" + "\n\n".join(new_alerts)
     send_message(msg)
     save_sent_alerts(sent_alerts)
