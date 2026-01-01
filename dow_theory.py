@@ -38,8 +38,8 @@ ticker_map = {
     'COIN': '코인베이스', 'AMD': 'AMD', 'AVGO': '브로드컴', 'TSM': 'TSMC', 'MU': '마이크론'
 }
 
-# 그룹별 저장소이다
 groups = {'🚀슈퍼': [], '💎눌림': [], '📦대기': [], '🚨위험': []}
+entry_points = [] # 오늘의 타점 저장소이다
 
 for symbol, name in ticker_map.items():
     try:
@@ -51,30 +51,29 @@ for symbol, name in ticker_map.items():
         df['MA20'] = df['Close'].rolling(window=20).mean()
         curr_ma20 = float(df['MA20'].iloc[-1])
         
-        # 상대 강도(RS) 계산: 최근 1개월 수익률이다
-        rs_score = (df['Close'].iloc[-1] / df['Close'].iloc[-20]) - 1
-        
         low_pivots = get_structural_pivots(df, mode='low')
         high_pivots = get_structural_pivots(df, mode='high')
         if len(low_pivots) < 2 or len(high_pivots) < 1: continue
 
         support = low_pivots[0]['val']
-        dist_to_sup = ((curr_p - support) / support) * 100 # 지지선까지의 거리이다
+        dist_to_sup = ((curr_p - support) / support) * 100
         
         is_breakout = curr_p > high_pivots[0]['val']
         is_hl = low_pivots[0]['val'] > low_pivots[1]['val']
         is_above_ma20 = curr_p > curr_ma20
         
-        info = f"{name}({symbol}): {curr_p:.1f}$ (지지선대비 +{dist_to_sup:.1f}%)"
+        info = f"{name}({symbol}): {curr_p:.1f}$ (+{dist_to_sup:.1f}%)"
 
-        # 조건별 그룹화이다
+        # 그룹 분류 로직이다
         if curr_p < support:
             groups['🚨위험'].append(info)
         elif is_above_ma20:
             if is_breakout:
                 groups['🚀슈퍼'].append(info)
+                if dist_to_sup <= 3.0: entry_points.append(f"🎯 {name}({symbol}): 지지선 밀착 돌파")
             else:
                 groups['💎눌림'].append(info)
+                if dist_to_sup <= 3.0: entry_points.append(f"🎯 {name}({symbol}): 최적의 눌림목")
         elif is_hl:
             groups['📦대기'].append(info)
         else:
@@ -82,15 +81,17 @@ for symbol, name in ticker_map.items():
 
     except: continue
 
-# 리포트 구성이다 (불필요한 설명 제거)
-report = f"🏛️ 전략적 다우 분석 리포트 (v104)\n" + "="*25 + "\n\n"
+# 리포트 생성이다
+report = f"🏛️ 다우 전략 분석 리포트 (v105)\n" + "="*25 + "\n\n"
+
+if entry_points:
+    report += "🔥 오늘의 타점 (지지선 3% 이내)\n"
+    report += "\n".join(entry_points) + "\n\n" + "*"*20 + "\n\n"
+
 for key, stocks in groups.items():
     report += f"{key} 종목군\n"
-    if stocks:
-        report += "\n".join(stocks)
-    else:
-        report += "해당 없음"
+    report += "\n".join(stocks) if stocks else "해당 없음"
     report += "\n\n" + "-"*20 + "\n\n"
-report += "="*25
 
+report += "="*25
 send_message(report)
