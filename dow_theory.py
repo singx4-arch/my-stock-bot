@@ -5,6 +5,7 @@ import os
 import numpy as np
 from datetime import datetime
 
+# 텔레그램 설정이다
 token = os.getenv('TELEGRAM_TOKEN') or '7971022798:AAFGQR1zxdCq1urZKgdRzjjsvr3Lt6T9y1I'
 chat_id = os.getenv('TELEGRAM_CHAT_ID')
 
@@ -39,7 +40,6 @@ ticker_map = {
 }
 
 groups = {'🚀슈퍼': [], '💎눌림': [], '📦대기': [], '🚨위험': []}
-entry_points = [] # 오늘의 타점 저장소이다
 
 for symbol, name in ticker_map.items():
     try:
@@ -48,8 +48,6 @@ for symbol, name in ticker_map.items():
         if isinstance(df.columns, pd.MultiIndex): df.columns = df.columns.get_level_values(0)
 
         curr_p = float(df['Close'].iloc[-1])
-        df['MA20'] = df['Close'].rolling(window=20).mean()
-        curr_ma20 = float(df['MA20'].iloc[-1])
         
         low_pivots = get_structural_pivots(df, mode='low')
         high_pivots = get_structural_pivots(df, mode='high')
@@ -58,35 +56,40 @@ for symbol, name in ticker_map.items():
         support = low_pivots[0]['val']
         dist_to_sup = ((curr_p - support) / support) * 100
         
-        is_breakout = curr_p > high_pivots[0]['val']
-        is_hl = low_pivots[0]['val'] > low_pivots[1]['val']
-        is_above_ma20 = curr_p > curr_ma20
+        # 수정된 핵심 판별 로직이다
+        is_hl = low_pivots[0]['val'] > low_pivots[1]['val'] # 저점 상승 여부이다
+        is_ll = low_pivots[0]['val'] < low_pivots[1]['val'] # 저점 하락 여부이다
+        is_breakout = curr_p > high_pivots[0]['val']        # 전고점 돌파 여부이다
+        is_structural_break = curr_p < support              # 지지선 실시간 이탈 여부이다
         
-        info = f"{name}({symbol}): {curr_p:.1f}$ (+{dist_to_sup:.1f}%)"
+        info = f"{name}({symbol}): {curr_p:.1f}$ (지지선대비 +{dist_to_sup:.1f}%)"
 
-        # 그룹 분류 로직이다
-        if curr_p < support:
+        if is_structural_break or is_ll:
+            # 지지선을 깼거나 저점 마디가 낮아졌다면 상승 추세가 아니다이다
             groups['🚨위험'].append(info)
-        elif is_above_ma20:
+        elif is_hl:
+            # 오직 저점이 높아진 상승 구조에서만 슈퍼나 눌림목으로 분류한다이다
             if is_breakout:
                 groups['🚀슈퍼'].append(info)
-                if dist_to_sup <= 3.0: entry_points.append(f"🎯 {name}({symbol}): 지지선 밀착 돌파")
             else:
                 groups['💎눌림'].append(info)
-                if dist_to_sup <= 3.0: entry_points.append(f"🎯 {name}({symbol}): 최적의 눌림목")
-        elif is_hl:
-            groups['📦대기'].append(info)
         else:
-            groups['🚨위험'].append(info)
+            # 저점이 같거나 구조가 불분명한 상태이다이다
+            groups['📦대기'].append(info)
 
     except: continue
 
-# 리포트 생성이다
-report = f"🏛️ 다우 전략 분석 리포트 (v105)\n" + "="*25 + "\n\n"
+guide = (
+    "💡 그룹별 운용 가이드\n"
+    "1. 🚀슈퍼 (제1우선순위): HH+HL 구조를 갖추고 신고가를 경신 중인 주도주이다.\n"
+    "2. 💎눌림 (제2우선순위): HL 구조는 유지되고 있으나 전고점 아래에서 조정 중인 구간이다.\n"
+    "3. 📦대기 (제3우선순위): 추세가 불분명하거나 박스권에 갇힌 관망 구간이다.\n"
+    "4. 🚨위험 (제외대상): 지지선 이탈 또는 LL(Lower Low) 발생으로 추세가 붕괴된 종목이다.\n\n"
+)
 
-if entry_points:
-    report += "🔥 오늘의 타점 (지지선 3% 이내)\n"
-    report += "\n".join(entry_points) + "\n\n" + "*"*20 + "\n\n"
+report = f"🏛️ 다우 구조 분석 리포트 (v107)\n" + "="*25 + "\n\n"
+report += guide
+report += "*"*20 + "\n\n"
 
 for key, stocks in groups.items():
     report += f"{key} 종목군\n"
