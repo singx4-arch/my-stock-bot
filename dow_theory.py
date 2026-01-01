@@ -12,7 +12,8 @@ chat_id = os.getenv('TELEGRAM_CHAT_ID')
 def send_message(text):
     if not token or not chat_id: return
     url = f"https://api.telegram.org/bot{token}/sendMessage"
-    params = {'chat_id': chat_id, 'text': text, 'parse_mode': 'Markdown'}
+    # 마크다운 대신 일반 텍스트 모드로 가독성을 조절한다이다
+    params = {'chat_id': chat_id, 'text': text}
     requests.get(url, params=params)
 
 def get_structural_pivots(df, lookback=120, filter_size=3, mode='low'):
@@ -33,27 +34,22 @@ def get_structural_pivots(df, lookback=120, filter_size=3, mode='low'):
             if len(pivots) == 3: break
     return pivots
 
-ticker_map = { 
-# 지수 및 레버리지
+ticker_map = {
     'QQQ': '나스닥100', 'TQQQ': '나스닥3배', 'SOXL': '반도체3배',
-    # 반도체 및 장비/소재 (코닝 추가됨)
     'NVDA': '엔비디아', 'TSM': 'TSMC', 'AVGO': '브로드컴', 'ASML': 'ASML', 
     'AMD': 'AMD', 'MU': '마이크론', 'GLW': '코닝', 'LRCX': '램리서치', 'AMAT': '어플라이드',
-    # AI 및 빅테크
     'MSFT': '마이크로소프트', 'GOOGL': '알파벳', 'AMZN': '아마존', 'META': '메타', 
     'AAPL': '애플', 'PLTR': '팔란티어', 'ORCL': '오라클',
-    # 유망 기술 및 인프라
     'IONQ': '아이온큐', 'TSLA': '테슬라', 'MSTR': 'MSTR', 'COIN': '코인베이스',
     'VST': '비스트라', 'CEG': '컨스텔레이션', 'ENPH': '엔페이즈'
 }
 
-# 종목군 정의 (키 이름을 박스권으로 통일했다이다)
 groups = {
-    '🚀슈퍼': [],
-    '💎눌림': [],
-    '⚠️눌림(하락추세)': [],
-    '📦박스권': [],
-    '🚨위험': []
+    '🚀 슈퍼 종목군': [],
+    '💎 눌림 종목군': [],
+    '⚠️ 눌림(주의)': [],
+    '📦 박스권/대기': [],
+    '🚨 위험 종목군': []
 }
 
 for symbol, name in ticker_map.items():
@@ -63,21 +59,15 @@ for symbol, name in ticker_map.items():
         if isinstance(df.columns, pd.MultiIndex): df.columns = df.columns.get_level_values(0)
 
         curr_p = float(df['Close'].iloc[-1])
-        
         df['SMMA7'] = df['Close'].ewm(alpha=1/7, adjust=False).mean()
         df['MA20'] = df['Close'].rolling(window=20).mean()
-        df['MA60'] = df['Close'].rolling(window=60).mean()
         
         curr_smma7 = float(df['SMMA7'].iloc[-1])
         curr_ma20 = float(df['MA20'].iloc[-1])
         
-        # 크로스 판정 로직이다
         gap_ratio = (curr_smma7 - curr_ma20) / curr_ma20
-        
-        # 골든크로스: 7SMMA가 20MA보다 높고 이격률이 0.15%를 초과할 때이다
-        is_golden_cross = (curr_smma7 > curr_ma20) and (gap_ratio > 0.0015)
-        # 데드크로스: 7SMMA가 아래에 있거나 이격률이 0.15% 이내로 좁혀졌을 때이다
-        is_dead_cross = (curr_smma7 < curr_ma20) or (0 <= gap_ratio <= 0.0015)
+        is_golden = (curr_smma7 > curr_ma20) and (gap_ratio > 0.0015)
+        is_dead = (curr_smma7 < curr_ma20) or (0 <= gap_ratio <= 0.0015)
         
         low_pivots = get_structural_pivots(df, mode='low')
         high_pivots = get_structural_pivots(df, mode='high')
@@ -85,44 +75,50 @@ for symbol, name in ticker_map.items():
 
         support = low_pivots[0]['val']
         dist_to_sup = ((curr_p - support) / support) * 100
-        
         is_breakout = curr_p > high_pivots[0]['val']
         is_hl = low_pivots[0]['val'] > low_pivots[1]['val']
         
-        # 기본 정보 구성이다
-        info = f"{name}({symbol}): {curr_p:.1f}$ (+{dist_to_sup:.1f}%)"
+        # 가독성을 위해 상태를 이모지로 직관화한다이다
+        trend_icon = "🟢" if is_golden else "🔴"
+        status_text = f"{trend_icon} {name}({symbol})"
+        price_text = f"{curr_p:.1f}$ (+{dist_to_sup:.1f}%)"
         
-        # 크로스 상태 메시지 추가이다
-        if is_golden_cross:
-            info += " (골든크로스/상승 추세)"
-        elif is_dead_cross:
-            info += " (데드크로스/하락 가능성 큼)"
+        full_info = f"{status_text} | {price_text}"
 
-        # 판별 로직(v117)이다
         if curr_p < support:
-            groups['🚨위험'].append(info)
+            groups['🚨 위험 종목군'].append(full_info)
         elif is_hl:
-            if is_dead_cross:
-                groups['⚠️눌림(하락추세)'].append(info + " (주의)")
+            if is_dead:
+                groups['⚠️ 눌림(주의)'].append(full_info)
             else:
-                groups['💎눌림'].append(info + " 🔥")
-        elif is_breakout and is_golden_cross:
-            groups['🚀슈퍼'].append(info + " 🔥")
+                groups['💎 눌림 종목군'].append(full_info + " 🔥")
+        elif is_breakout and is_golden:
+            groups['🚀 슈퍼 종목군'].append(full_info + " 🔥")
         else:
-            # 박스권/대기 종목군으로 분류한다이다
-            groups['📦박스권'].append(info)
+            groups['📦 박스권/대기'].append(full_info)
 
     except: continue
 
-report = f"🏛️ 다우 구조 및 데드크로스 분석 리포트 (v117)\n" + "="*25 + "\n\n"
-report += "💡 가이드: 🔥는 정배열 상태, ⚠️눌림(하락추세)는 구조는 살아있으나 지표가 둔화된 상태이다.\n\n"
+# 리포트 레이아웃 구성이다
+report = f"🏛️ 마켓 구조 분석 리포트 (v121)\n"
+report += f"일시: {datetime.now().strftime('%Y-%m-%d %H:%M')}\n"
+report += "─" * 15 + "\n"
+report += "💡 🟢골든 / 🔴데드(근접) / 🔥정배열\n"
+report += "─" * 15 + "\n\n"
 
-order = ['🚀슈퍼', '💎눌림', '⚠️눌림(하락추세)', '📦박스권', '🚨위험']
+order = ['🚀 슈퍼 종목군', '💎 눌림 종목군', '⚠️ 눌림(주의)', '📦 박스권/대기', '🚨 위험 종목군']
+
 for key in order:
     stocks = groups[key]
-    report += f"{key} 종목군\n"
-    report += "\n".join(stocks) if stocks else "해당 없음"
-    report += "\n\n" + "-"*20 + "\n\n"
+    report += f"{key}\n"
+    if stocks:
+        # 각 종목 앞에 불렛 포인트를 넣어 구분한다이다
+        report += "\n".join([f"• {s}" for s in stocks])
+    else:
+        report += "• 해당 종목 없음"
+    report += "\n\n"
 
-report += "="*25
+report += "─" * 15 + "\n"
+report += "분석 종료이다."
+
 send_message(report)
