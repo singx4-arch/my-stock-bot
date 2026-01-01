@@ -4,7 +4,7 @@ on:
   schedule:
     # 한국 시간(KST) 밤 11시는 UTC 기준 오후 2시이다
     - cron: '0 14 * * *'
-  workflow_dispatch: # 수동 실행 버튼을 활성화한다이다
+  workflow_dispatch: # 수동 실행 버튼 활성화이다
 
 jobs:
   build:
@@ -17,7 +17,7 @@ jobs:
     - name: Set up Python
       uses: actions/setup-python@v4
       with:
-        python-version: '3.9'
+        python-version: '3.11' # 3.9에서 3.11로 수정했다이다
 
     - name: Install dependencies
       run: |
