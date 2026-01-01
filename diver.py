@@ -3,10 +3,9 @@ import pandas as pd
 import requests
 import os
 import numpy as np
-import json
 from datetime import datetime
 
-# 1. 환경 설정
+# 1. 환경 설정이다
 token = os.getenv('TELEGRAM_TOKEN') or '7971022798:AAFGQR1zxdCq1urZKgdRzjjsvr3Lt6T9y1I'
 chat_id = os.getenv('TELEGRAM_CHAT_ID')
 
@@ -50,8 +49,13 @@ def run_analysis():
         'TSM': 'TSMC', 'MU': '마이크론', 'GLW': '코닝'
     }
 
-    div_results = []
-    trend_results = []
+    # 결과를 담을 딕셔너리이다
+    div_groups = {
+        '일반 상승 다이버전스 (반전 상승)': [],
+        '히든 상승 다이버전스 (추세 지속)': [],
+        '일반 하락 다이버전스 (반전 하락)': [],
+        '히든 하락 다이버전스 (추세 지속)': []
+    }
 
     for symbol, name in ticker_map.items():
         try:
@@ -59,54 +63,57 @@ def run_analysis():
             if len(df) < 100: continue
             if isinstance(df.columns, pd.MultiIndex): df.columns = df.columns.get_level_values(0)
             
-            # 이평선 및 RSI 계산이다
             df['RSI'] = calculate_rsi(df['Close'])
-            df['SMMA7'] = df['Close'].ewm(alpha=1/7, adjust=False).mean()
-            df['MA20'] = df['Close'].rolling(window=20).mean()
             df = df.dropna()
 
-            curr_p = df['Close'].iloc[-1]
-            curr_s7 = df['SMMA7'].iloc[-1]
-            curr_m20 = df['MA20'].iloc[-1]
-            gap_ratio = (curr_s7 - curr_m20) / curr_m20
-
-            # A. 다이버전스 분석이다
+            # 저점/고점 스윙 포인트 추출이다
             low_idx = find_swings(df['Low'], window=4, mode='low')
             high_idx = find_swings(df['High'], window=4, mode='high')
             
+            # 상승 계열 분석 (저점 비교)이다
             if len(low_idx) >= 2:
                 i1, i2 = low_idx[-2], low_idx[-1]
-                if df['Low'].iloc[i2] < df['Low'].iloc[i1] and df['RSI'].iloc[i2] > df['RSI'].iloc[i1]:
-                    div_results.append(f"- {name}({symbol}): 상승 다이버전스 포착")
-            
+                p1, p2 = df['Low'].iloc[i1], df['Low'].iloc[i2]
+                r1, r2 = df['RSI'].iloc[i1], df['RSI'].iloc[i2]
+                
+                # 일반 상승: 가격 저점 하락 + RSI 저점 상승이다
+                if p2 < p1 and r2 > r1:
+                    div_groups['일반 상승 다이버전스 (반전 상승)'].append(f"- {name}({symbol})")
+                # 히든 상승: 가격 저점 상승 + RSI 저점 하락이다
+                elif p2 > p1 and r2 < r1:
+                    div_groups['히든 상승 다이버전스 (추세 지속)'].append(f"- {name}({symbol})")
+
+            # 하락 계열 분석 (고점 비교)이다
             if len(high_idx) >= 2:
                 i1, i2 = high_idx[-2], high_idx[-1]
-                if df['High'].iloc[i2] > df['High'].iloc[i1] and df['RSI'].iloc[i2] < df['RSI'].iloc[i1]:
-                    div_results.append(f"- {name}({symbol}): 하락 다이버전스 포착")
-
-            # B. 0.15% 근접 및 추세 분석이다
-            is_dead = (curr_s7 < curr_m20) or (0 <= gap_ratio <= 0.0015)
-            if is_dead:
-                trend_results.append(f"- {name}({symbol}): 추세 둔화/데드 주의")
+                p1, p2 = df['High'].iloc[i1], df['High'].iloc[i2]
+                r1, r2 = df['RSI'].iloc[i1], df['RSI'].iloc[i2]
+                
+                # 일반 하락: 가격 고점 상승 + RSI 고점 하락이다
+                if p2 > p1 and r2 < r1:
+                    div_groups['일반 하락 다이버전스 (반전 하락)'].append(f"- {name}({symbol})")
+                # 히든 하락: 가격 고점 하락 + RSI 고점 상승이다
+                elif p2 < p1 and r2 > r1:
+                    div_groups['히든 하락 다이버전스 (추세 지속)'].append(f"- {name}({symbol})")
 
         except Exception as e:
             print(f"{symbol} 분석 오류: {e}")
 
     # 리포트 작성이다
-    report = "🏛️ 통합 마켓 구조 분석 리포트\n"
+    report = "🔍 4대 다이버전스 정밀 분석 리포트\n"
     report += f"분석 일시: {datetime.now().strftime('%Y-%m-%d %H:%M')}\n"
-    report += "------------------------------\n\n"
+    report += "-" * 30 + "\n\n"
 
-    report += "■ RSI 다이버전스 포착\n"
-    report += "\n".join(div_results) if div_results else "포착된 신호 없음"
-    report += "\n\n"
+    for group_name, stocks in div_groups.items():
+        report += f"■ {group_name}\n"
+        if stocks:
+            report += "\n".join(stocks)
+        else:
+            report += "- 해당 종목 없음"
+        report += "\n\n"
 
-    report += "■ 0.15% 이평선 근접 (추세 주의)\n"
-    report += "\n".join(trend_results) if trend_results else "모든 종목 추세 양호"
-    report += "\n\n"
-
-    report += "------------------------------\n"
-    report += "분석 완료이다."
+    report += "-" * 30 + "\n"
+    report += "모든 투자의 책임은 본인에게 있다이다."
     
     send_message(report)
 
