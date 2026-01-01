@@ -38,9 +38,9 @@ ticker_map = {
     'COIN': '코인베이스', 'AMD': 'AMD', 'AVGO': '브로드컴', 'TSM': 'TSMC', 'MU': '마이크론'
 }
 
-uptrend_stocks = []   # 🚀 찐 상승 (HH + HL + 현재가 전고 돌파)
-pullback_stocks = []  # 💎 진짜 눌림 (HL 유지 + 현재가 지지선 위)
-break_stocks = []     # 🚨 구조적 붕괴 (현재가 < 직전저점 OR 저점 하락)
+uptrend_stocks = []   # 🚀 주도주: HH + HL + 20일선 위
+pullback_stocks = []  # 💎 기회주: 조정 중이나 20일선/지지선 방어
+risk_stocks = []      # 🚨 위험주: 지지선 완전 붕괴 (MSTR 같은 케이스)
 
 for symbol, name in ticker_map.items():
     try:
@@ -49,37 +49,48 @@ for symbol, name in ticker_map.items():
         if isinstance(df.columns, pd.MultiIndex): df.columns = df.columns.get_level_values(0)
 
         curr_p = float(df['Close'].iloc[-1])
+        df['MA20'] = df['Close'].rolling(window=20).mean()
+        curr_ma20 = float(df['MA20'].iloc[-1])
+        
         low_pivots = get_structural_pivots(df, mode='low')
         high_pivots = get_structural_pivots(df, mode='high')
 
         if len(low_pivots) < 2 or len(high_pivots) < 1: continue
 
-        # 전문가 필터 1: 현재 가격이 직전 지지선을 깼는가? (가장 중요)
-        is_immediate_break = curr_p < low_pivots[0]['val']
-        # 전문가 필터 2: 저점이 낮아지고 있는가? (LL - Lower Low)
-        is_ll = low_pivots[0]['val'] < low_pivots[1]['val']
-        
-        # 상승/눌림 조건
+        # 봇의 핵심 로직: 지지선 붕괴 여부와 이평선 위치를 동시에 판단한다
+        # 1. 최악의 상황: 직전 저점 마디를 실시간으로 뚫고 내려감 (MSTR 케이스)
+        is_structural_break = curr_p < low_pivots[0]['val']
+        # 2. 상승 구조 확인 (저점 상승)
         is_hl = low_pivots[0]['val'] > low_pivots[1]['val']
+        # 3. 고점 돌파 확인 (전고점 갱신)
         is_hh = curr_p > high_pivots[0]['val']
-        
-        info = f"[{name}({symbol})]\n현재가: {curr_p:.2f}$\n직전저점: {low_pivots[0]['val']:.2f}$"
+        # 4. 이평선 지지 (추세 방패)
+        is_above_ma20 = curr_p > curr_ma20
 
-        # 판별 순서 조정: 이탈을 가장 먼저 확인함
-        if is_immediate_break or is_ll:
-            # MSTR처럼 꼬라박는 상황을 여기서 잡아냄
-            break_stocks.append("🚨 " + info)
-        elif is_hl and is_hh:
-            uptrend_stocks.append("🚀 " + info)
-        elif is_hl and not is_hh:
-            pullback_stocks.append("💎 " + info)
+        info = f"[{name}({symbol})]\n가: {curr_p:.2f}$ | 지지: {low_pivots[0]['val']:.2f}$"
+
+        if is_structural_break:
+            # 추세가 완전히 박살 난 경우이다
+            risk_stocks.append("🚨 " + info)
+        elif is_above_ma20:
+            # 주가가 20일선 위에 있으면 구조적 우위를 인정한다
+            if is_hh:
+                uptrend_stocks.append("🚀 " + info)
+            else:
+                pullback_stocks.append("💎 " + info)
+        elif is_hl:
+            # 20일선 아래지만 저점 마디는 지키고 있는 중이다
+            pullback_stocks.append("📦 " + info + "\n(20일선 회복 대기)")
+        else:
+            # 저점이 낮아지고 있고 20일선도 아래에 있다
+            risk_stocks.append("🚨 " + info)
 
     except: continue
 
-report = f"🏛️ 다우 구조 분석 리포트 (v102)\n" + "="*25 + "\n\n"
-report += "🚀 상승 확정: 강한 추세\n" + ("\n\n".join(uptrend_stocks) if uptrend_stocks else "해당 없음") + "\n\n"
-report += "💎 눌림목: 지지선 위 조정\n" + ("\n\n".join(pullback_stocks) if pullback_stocks else "해당 없음") + "\n\n"
-report += "🚨 추세 이탈: 지지선 붕괴/하락세\n" + ("\n\n".join(break_stocks) if break_stocks else "해당 없음") + "\n\n"
+report = f"🏛️ 다우 추세 분석 리포트 (v103)\n" + "="*25 + "\n\n"
+report += "🚀 상승 확정: 주도주 그룹\n" + ("\n\n".join(uptrend_stocks) if uptrend_stocks else "해당 없음") + "\n\n"
+report += "💎 조정/기회: 눌림목 및 박스권\n" + ("\n\n".join(pullback_stocks) if pullback_stocks else "해당 없음") + "\n\n"
+report += "🚨 추세 이탈: 위험/관망\n" + ("\n\n".join(risk_stocks) if risk_stocks else "해당 없음") + "\n\n"
 report += "="*25
 
 send_message(report)
