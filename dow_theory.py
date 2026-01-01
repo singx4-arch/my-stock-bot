@@ -12,7 +12,7 @@ chat_id = os.getenv('TELEGRAM_CHAT_ID')
 def send_message(text):
     if not token or not chat_id: return
     url = f"https://api.telegram.org/bot{token}/sendMessage"
-    # 마크다운 대신 일반 텍스트 모드로 가독성을 조절한다이다
+    # 볼드체 방지를 위해 parse_mode를 사용하지 않는다이다
     params = {'chat_id': chat_id, 'text': text}
     requests.get(url, params=params)
 
@@ -34,6 +34,7 @@ def get_structural_pivots(df, lookback=120, filter_size=3, mode='low'):
             if len(pivots) == 3: break
     return pivots
 
+# 티커 맵 (지수, 반도체, AI, 에너지 섹터 통합)
 ticker_map = {
     'QQQ': '나스닥100', 'TQQQ': '나스닥3배', 'SOXL': '반도체3배',
     'NVDA': '엔비디아', 'TSM': 'TSMC', 'AVGO': '브로드컴', 'ASML': 'ASML', 
@@ -45,11 +46,11 @@ ticker_map = {
 }
 
 groups = {
-    '🚀 슈퍼 종목군': [],
-    '💎 눌림 종목군': [],
-    '⚠️ 눌림(주의)': [],
-    '📦 박스권/대기': [],
-    '🚨 위험 종목군': []
+    '🚀 슈퍼 종목군 (주도주)': [],
+    '💎 눌림 종목군 (매수기회)': [],
+    '⚠️ 주의 종목 (추세둔화)': [],
+    '📦 박스권 및 대기': [],
+    '🚨 위험 종목 (지지이탈)': []
 }
 
 for symbol, name in ticker_map.items():
@@ -78,47 +79,42 @@ for symbol, name in ticker_map.items():
         is_breakout = curr_p > high_pivots[0]['val']
         is_hl = low_pivots[0]['val'] > low_pivots[1]['val']
         
-        # 가독성을 위해 상태를 이모지로 직관화한다이다
-        trend_icon = "🟢" if is_golden else "🔴"
-        status_text = f"{trend_icon} {name}({symbol})"
-        price_text = f"{curr_p:.1f}$ (+{dist_to_sup:.1f}%)"
-        
-        full_info = f"{status_text} | {price_text}"
+        # 달러 가격($) 정보를 제거하고 추세와 이격률만 남겼다이다
+        trend_label = "[상승]" if is_golden else "[주의]"
+        info = f"{name}({symbol})  (+{dist_to_sup:.1f}%)  {trend_label}"
 
         if curr_p < support:
-            groups['🚨 위험 종목군'].append(full_info)
+            groups['🚨 위험 종목 (지지이탈)'].append(info)
         elif is_hl:
             if is_dead:
-                groups['⚠️ 눌림(주의)'].append(full_info)
+                groups['⚠️ 주의 종목 (추세둔화)'].append(info)
             else:
-                groups['💎 눌림 종목군'].append(full_info + " 🔥")
+                groups['💎 눌림 종목군 (매수기회)'].append(info + " 🔥")
         elif is_breakout and is_golden:
-            groups['🚀 슈퍼 종목군'].append(full_info + " 🔥")
+            groups['🚀 슈퍼 종목군 (주도주)'].append(info + " 🔥")
         else:
-            groups['📦 박스권/대기'].append(full_info)
+            groups['📦 박스권 및 대기'].append(info)
 
     except: continue
 
-# 리포트 레이아웃 구성이다
-report = f"🏛️ 마켓 구조 분석 리포트 (v121)\n"
-report += f"일시: {datetime.now().strftime('%Y-%m-%d %H:%M')}\n"
-report += "─" * 15 + "\n"
-report += "💡 🟢골든 / 🔴데드(근접) / 🔥정배열\n"
-report += "─" * 15 + "\n\n"
+report = f"🏛️ 마켓 구조 분석 리포트 (v123)\n"
+report += f"분석 일시: {datetime.now().strftime('%Y-%m-%d %H:%M')}\n"
+report += "------------------------------\n"
+report += "안내: [상승]은 정배열, [주의]는 데드/근접 상태이다.\n"
+report += "------------------------------\n\n"
 
-order = ['🚀 슈퍼 종목군', '💎 눌림 종목군', '⚠️ 눌림(주의)', '📦 박스권/대기', '🚨 위험 종목군']
+order = ['🚀 슈퍼 종목군 (주도주)', '💎 눌림 종목군 (매수기회)', '⚠️ 주의 종목 (추세둔화)', '📦 박스권 및 대기', '🚨 위험 종목 (지지이탈)']
 
 for key in order:
     stocks = groups[key]
-    report += f"{key}\n"
+    report += f"■ {key}\n"
     if stocks:
-        # 각 종목 앞에 불렛 포인트를 넣어 구분한다이다
-        report += "\n".join([f"• {s}" for s in stocks])
+        report += "\n".join([f"  - {s}" for s in stocks])
     else:
-        report += "• 해당 종목 없음"
+        report += "  - 해당 종목 없음"
     report += "\n\n"
 
-report += "─" * 15 + "\n"
-report += "분석 종료이다."
+report += "------------------------------\n"
+report += "리포트 분석을 종료한다이다."
 
 send_message(report)
