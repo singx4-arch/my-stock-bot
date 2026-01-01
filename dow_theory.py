@@ -39,11 +39,71 @@ ticker_map = {
     'COIN': '코인베이스', 'AMD': 'AMD', 'AVGO': '브로드컴', 'TSM': 'TSMC', 'MU': '마이크론'
 }
 
-# 사용자 요청대로 눌림 하락추세를 별도로 추가했다이다
+# 문자열 오류 방지를 위해 딕셔너리를 더 명확하게 정의했다이다
 groups = {
-    '🚀슈퍼': [], 
-    '💎눌림': [], 
-    '⚠️눌림(하락추세)': [], # 여기가 새로 추가된 종목군이다
-    '📉하락추세': [], 
-    '📦대기': [], 
-    '🚨위
+    '🚀슈퍼': [],
+    '💎눌림': [],
+    '⚠️눌림(하락추세)': [],
+    '📉하락추세': [],
+    '📦대기': [],
+    '🚨위험': []
+}
+
+for symbol, name in ticker_map.items():
+    try:
+        df = yf.download(symbol, period='1y', interval='1d', progress=False)
+        if len(df) < 120: continue
+        if isinstance(df.columns, pd.MultiIndex): df.columns = df.columns.get_level_values(0)
+
+        curr_p = float(df['Close'].iloc[-1])
+        
+        df['SMMA7'] = df['Close'].ewm(alpha=1/7, adjust=False).mean()
+        df['MA20'] = df['Close'].rolling(window=20).mean()
+        df['MA60'] = df['Close'].rolling(window=60).mean()
+        
+        curr_smma7 = float(df['SMMA7'].iloc[-1])
+        curr_ma20 = float(df['MA20'].iloc[-1])
+        curr_ma60 = float(df['MA60'].iloc[-1])
+        
+        gap_ratio = (curr_smma7 - curr_ma20) / curr_ma20
+        is_dead_cross = (curr_smma7 < curr_ma20) or (0 <= gap_ratio <= 0.0015)
+        
+        low_pivots = get_structural_pivots(df, mode='low')
+        high_pivots = get_structural_pivots(df, mode='high')
+        if len(low_pivots) < 2 or len(high_pivots) < 1: continue
+
+        support = low_pivots[0]['val']
+        dist_to_sup = ((curr_p - support) / support) * 100
+        
+        is_breakout = curr_p > high_pivots[0]['val']
+        is_hl = low_pivots[0]['val'] > low_pivots[1]['val']
+        
+        info = f"{name}({symbol}): {curr_p:.1f}$ (+{dist_to_sup:.1f}%)"
+
+        if curr_p < support:
+            groups['🚨위험'].append(info)
+        elif is_hl and is_dead_cross:
+            groups['⚠️눌림(하락추세)'].append(info + " (주의)")
+        elif is_hl and not is_dead_cross:
+            groups['💎눌림'].append(info + " 🔥")
+        elif is_breakout and not is_dead_cross:
+            groups['🚀슈퍼'].append(info + " 🔥")
+        elif is_dead_cross:
+            groups['📉하락추세'].append(info)
+        else:
+            groups['📦대기'].append(info)
+
+    except: continue
+
+report = f"🏛️ 다우 구조 및 데드크로스 분석 리포트 (v115)\n" + "="*25 + "\n\n"
+report += "💡 가이드: 🔥는 정배열 상태, ⚠️눌림(하락추세)는 구조는 살아있으나 지표가 꺾인 상태이다.\n\n"
+
+order = ['🚀슈퍼', '💎눌림', '⚠️눌림(하락추세)', '📉하락추세', '📦대기', '🚨위험']
+for key in order:
+    stocks = groups[key]
+    report += f"{key} 종목군\n"
+    report += "\n".join(stocks) if stocks else "해당 없음"
+    report += "\n\n" + "-"*20 + "\n\n"
+
+report += "="*25
+send_message(report)
