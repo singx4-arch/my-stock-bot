@@ -49,7 +49,7 @@ for symbol, name in ticker_map.items():
 
         curr_p = float(df['Close'].iloc[-1])
         
-        # 이동평균선 계산 (7SMMA, 20MA, 60MA)이다
+        # 이동평균선 계산이다
         df['SMMA7'] = df['Close'].ewm(alpha=1/7, adjust=False).mean()
         df['MA20'] = df['Close'].rolling(window=20).mean()
         df['MA60'] = df['Close'].rolling(window=60).mean()
@@ -58,9 +58,8 @@ for symbol, name in ticker_map.items():
         curr_ma20 = float(df['MA20'].iloc[-1])
         curr_ma60 = float(df['MA60'].iloc[-1])
         
-        # 완전 정배열 여부 확인이다
+        # 완전 정배열 및 데드크로스 확인이다
         is_bullish_alignment = curr_smma7 > curr_ma20 > curr_ma60
-        # 데드크로스 여부 확인이다
         is_dead_cross = curr_smma7 < curr_ma20
         
         low_pivots = get_structural_pivots(df, mode='low')
@@ -73,27 +72,29 @@ for symbol, name in ticker_map.items():
         is_breakout = curr_p > high_pivots[0]['val']
         is_hl = low_pivots[0]['val'] > low_pivots[1]['val']
         
-        # 정보 텍스트 구성이다
+        # 정보 문구 구성이다
         info = f"{name}({symbol}): {curr_p:.1f}$ (+{dist_to_sup:.1f}%)"
         if is_bullish_alignment:
-            info += " 🔥" # 상승 에너지가 아주 강함이다
+            info += " 🔥"
+        if is_dead_cross:
+            info += " (데드크로스/하락 가능성 큼)"
 
-        # 판별 로직 (v111)이다
+        # 그룹 판별 로직(v112)이다
         if curr_p < support:
             groups['🚨위험'].append(info)
-        elif is_breakout:
+        elif is_breakout and not is_dead_cross:
             groups['🚀슈퍼'].append(info)
         elif is_hl:
-            if is_dead_cross:
-                info += " (하락 가능성 큼)"
+            # 저점이 높아진 상태라도 데드크로스면 눌림목으로 분류하되 경고를 붙인다이다
             groups['💎눌림'].append(info)
         else:
+            # 저점이 낮아졌거나 데드크로스 상태에서 지지선만 지키는 경우이다
             groups['📦대기'].append(info)
 
     except: continue
 
-report = f"🏛️ 다우 구조 및 상승 에너지 분석 리포트 (v111)\n" + "="*25 + "\n\n"
-report += "💡 가이드: 🔥 표시는 7/20/60일 이평선이 완전 정배열인 종목이다.\n\n"
+report = f"🏛️ 다우 구조 및 데드크로스 분석 리포트 (v112)\n" + "="*25 + "\n\n"
+report += "💡 가이드: 🔥는 정배열 상태, 데드크로스 문구는 단기 추세 약화를 의미한다이다.\n\n"
 
 for key, stocks in groups.items():
     report += f"{key} 종목군\n"
