@@ -40,12 +40,26 @@ def find_swings(series, window=3, mode='low'):
     return swings
 
 # 2. 고도화된 분석 엔진이다
-def run_analysis_v133():
+def run_analysis_v134():
+    # 티커 리스트를 40개 이상으로 대폭 확장했다이다
     ticker_map = {
-        'QQQ': '나스닥100', 'TQQQ': '나스닥3배', 'SOXL': '반도체3배',
-        'NVDA': '엔비디아', 'TSLA': '테슬라', 'AAPL': '애플', 'MSFT': '마이크로소프트',
-        'AMZN': '아마존', 'META': '메타', 'GOOGL': '구글', 'PLTR': '팔란티어',
-        'TSM': 'TSMC', 'MU': '마이크론', 'GLW': '코닝', 'IONQ': '아이온큐'
+        # 지수 및 레버리지
+        'QQQ': '나스닥100', 'TQQQ': '나스닥3배', 'SOXL': '반도체3배', 'SPY': 'S&P500',
+        # 반도체 및 장비
+        'NVDA': '엔비디아', 'TSM': 'TSMC', 'AVGO': '브로드컴', 'ASML': 'ASML', 
+        'AMD': 'AMD', 'MU': '마이크론', 'AMAT': '어플라이드', 'LRCX': '램리서치', 
+        'QCOM': '퀄컴', 'ARM': 'ARM', 'SMCI': '슈퍼마이크로', 'INTC': '인텔',
+        # AI 및 빅테크
+        'MSFT': '마이크로소프트', 'AAPL': '애플', 'AMZN': '아마존', 'META': '메타', 
+        'GOOGL': '구글', 'PLTR': '팔란티어', 'ORCL': '오라클', 'NOW': '서비스나우',
+        # AI 인프라 및 네트워킹
+        'ANET': '아리스타', 'VRT': '버티브', 'DELL': '델', 'IBM': 'IBM',
+        # 유망 기술 및 성장주
+        'TSLA': '테슬라', 'MSTR': '마이크로스트래티지', 'COIN': '코인베이스', 'IONQ': '아이온큐',
+        'NFLX': '넷플릭스', 'UBER': '우버', 'SHOP': '쇼피파이', 'HOOD': '로빈후드',
+        # 에너지 및 유틸리티 (AI 전력 관련)
+        'VST': '비스트라', 'CEG': '컨스텔레이션', 'OKLO': '오클로', 'SMR': '뉴스케일',
+        'NLR': '우라늄ETF', 'XLE': '에너지ETF', 'GLW': '코닝'
     }
 
     final_groups = {
@@ -69,7 +83,7 @@ def run_analysis_v133():
             low_idx = find_swings(df['Low'], window=3, mode='low')
             high_idx = find_swings(df['High'], window=3, mode='high')
             
-            sigs = [] # 발견된 신호들을 임시 저장한다이다
+            sigs = []
 
             # 상승 계열 분석이다
             if len(low_idx) >= 2:
@@ -91,7 +105,6 @@ def run_analysis_v133():
             info = f"- {name}({symbol}){vol_msg}"
 
             if 'REG_BEAR' in sigs and 'HID_BULL' in sigs:
-                # 테슬라 케이스: 고점 저항선 부근이면 하락을 우선한다이다
                 res_line = df['High'].iloc[high_idx[-1]]
                 if abs(curr_p - res_line) / res_line < 0.03:
                     final_groups['🚨 강력 하락 주의 (일반 하락)'].append(info + " (고점 저항 근접)")
@@ -104,14 +117,14 @@ def run_analysis_v133():
             elif 'HID_BULL' in sigs:
                 final_groups['📈 추세 강화 (히든 상승)'].append(info)
             elif 'HID_BEAR' in sigs:
-                # 엔비디아 케이스: 거래량이 실린 히든 하락은 돌파 시도로 보고 제외한다이다
                 if curr_vol < avg_vol:
                     final_groups['📉 조정 경고 (히든 하락)'].append(info)
 
         except: continue
 
-    report = "🏛️ 정밀 마켓 구조 분석 리포트 (v133)\n"
+    report = "🏛️ 확장 마켓 구조 분석 리포트 (v134)\n"
     report += f"분석 일시: {datetime.now().strftime('%Y-%m-%d %H:%M')}\n"
+    report += f"분석 대상: {len(ticker_map)}개 종목\n"
     report += "-" * 30 + "\n\n"
 
     for title, stocks in final_groups.items():
@@ -119,8 +132,8 @@ def run_analysis_v133():
         report += "\n".join(stocks) if stocks else "- 해당 없음"
         report += "\n\n"
 
-    report += "-" * 30 + "\n테슬라와 같은 신호 충돌은 저항선 기준으로 재분류했다이다."
+    report += "-" * 30 + "\n전 섹터 유망주 분석을 마친다이다."
     send_message(report)
 
 if __name__ == "__main__":
-    run_analysis_v133()
+    run_analysis_v134()
