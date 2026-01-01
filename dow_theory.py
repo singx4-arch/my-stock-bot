@@ -44,10 +44,25 @@ groups = {'🚀슈퍼': [], '💎눌림': [], '📦대기': [], '🚨위험': []
 for symbol, name in ticker_map.items():
     try:
         df = yf.download(symbol, period='1y', interval='1d', progress=False)
-        if len(df) < 100: continue
+        if len(df) < 120: continue
         if isinstance(df.columns, pd.MultiIndex): df.columns = df.columns.get_level_values(0)
 
         curr_p = float(df['Close'].iloc[-1])
+        
+        # 이동평균선 계산 (7SMMA, 20MA, 60MA)이다
+        df['SMMA7'] = df['Close'].ewm(alpha=1/7, adjust=False).mean()
+        df['MA20'] = df['Close'].rolling(window=20).mean()
+        df['MA60'] = df['Close'].rolling(window=60).mean()
+        
+        curr_smma7 = float(df['SMMA7'].iloc[-1])
+        curr_ma20 = float(df['MA20'].iloc[-1])
+        curr_ma60 = float(df['MA60'].iloc[-1])
+        
+        # 완전 정배열 여부 확인이다
+        is_bullish_alignment = curr_smma7 > curr_ma20 > curr_ma60
+        # 데드크로스 여부 확인이다
+        is_dead_cross = curr_smma7 < curr_ma20
+        
         low_pivots = get_structural_pivots(df, mode='low')
         high_pivots = get_structural_pivots(df, mode='high')
         if len(low_pivots) < 2 or len(high_pivots) < 1: continue
@@ -58,35 +73,27 @@ for symbol, name in ticker_map.items():
         is_breakout = curr_p > high_pivots[0]['val']
         is_hl = low_pivots[0]['val'] > low_pivots[1]['val']
         
-        info = f"{name}({symbol}): {curr_p:.1f}$ (지지선대비 +{dist_to_sup:.1f}%)"
+        # 정보 텍스트 구성이다
+        info = f"{name}({symbol}): {curr_p:.1f}$ (+{dist_to_sup:.1f}%)"
+        if is_bullish_alignment:
+            info += " 🔥" # 상승 에너지가 아주 강함이다
 
-        # 판별 로직 최적화 (v109)
+        # 판별 로직 (v111)이다
         if curr_p < support:
-            # 실시간으로 가격이 지지선을 뚫고 내려가면 예외 없이 위험이다
             groups['🚨위험'].append(info)
         elif is_breakout:
-            # 전고점을 돌파한 상태라면 슈퍼 주도주이다
             groups['🚀슈퍼'].append(info)
         elif is_hl:
-            # 저점이 높아진 상태에서 전고점 아래라면 눌림목이다
+            if is_dead_cross:
+                info += " (하락 가능성 큼)"
             groups['💎눌림'].append(info)
         else:
-            # 저점은 낮아졌으나 가격이 지지선 위에 있다면 박스권 대기이다
             groups['📦대기'].append(info)
 
     except: continue
 
-guide = (
-    "💡 그룹별 운용 가이드\n"
-    "1. 🚀슈퍼 (제1우선순위): 전고점을 돌파하며 상승 에너지가 분출되는 주도주이다.\n"
-    "2. 💎눌림 (제2우선순위): 저점이 높아진 상승 구조 내에서 발생하는 건강한 조정이다.\n"
-    "3. 📦대기 (제3우선순위): 저점 하락 등 추세 둔화 징후가 있으나 지지선은 지키는 박스권이다.\n"
-    "4. 🚨위험 (제외대상): 지지선을 실시간으로 이탈하여 하락이 확정된 위험 종목이다.\n\n"
-)
-
-report = f"🏛️ 다우 구조 분석 리포트 (v109)\n" + "="*25 + "\n\n"
-report += guide
-report += "*"*20 + "\n\n"
+report = f"🏛️ 다우 구조 및 상승 에너지 분석 리포트 (v111)\n" + "="*25 + "\n\n"
+report += "💡 가이드: 🔥 표시는 7/20/60일 이평선이 완전 정배열인 종목이다.\n\n"
 
 for key, stocks in groups.items():
     report += f"{key} 종목군\n"
