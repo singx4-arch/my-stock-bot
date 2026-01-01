@@ -39,7 +39,7 @@ ticker_map = {
     'COIN': '코인베이스', 'AMD': 'AMD', 'AVGO': '브로드컴', 'TSM': 'TSMC', 'MU': '마이크론'
 }
 
-# 하락 추세군을 제거하고 대기 종목군으로 통합했다이다
+# 종목군 정의 (키 이름을 박스권으로 통일했다이다)
 groups = {
     '🚀슈퍼': [],
     '💎눌림': [],
@@ -62,10 +62,13 @@ for symbol, name in ticker_map.items():
         
         curr_smma7 = float(df['SMMA7'].iloc[-1])
         curr_ma20 = float(df['MA20'].iloc[-1])
-        curr_ma60 = float(df['MA60'].iloc[-1])
         
-        # 0.15% 근접 조건이 포함된 하락 추세 판정이다
+        # 크로스 판정 로직이다
         gap_ratio = (curr_smma7 - curr_ma20) / curr_ma20
+        
+        # 골든크로스: 7SMMA가 20MA보다 높고 이격률이 0.15%를 초과할 때이다
+        is_golden_cross = (curr_smma7 > curr_ma20) and (gap_ratio > 0.0015)
+        # 데드크로스: 7SMMA가 아래에 있거나 이격률이 0.15% 이내로 좁혀졌을 때이다
         is_dead_cross = (curr_smma7 < curr_ma20) or (0 <= gap_ratio <= 0.0015)
         
         low_pivots = get_structural_pivots(df, mode='low')
@@ -78,9 +81,16 @@ for symbol, name in ticker_map.items():
         is_breakout = curr_p > high_pivots[0]['val']
         is_hl = low_pivots[0]['val'] > low_pivots[1]['val']
         
+        # 기본 정보 구성이다
         info = f"{name}({symbol}): {curr_p:.1f}$ (+{dist_to_sup:.1f}%)"
+        
+        # 크로스 상태 메시지 추가이다
+        if is_golden_cross:
+            info += " (골든크로스/상승 추세)"
+        elif is_dead_cross:
+            info += " (데드크로스/하락 가능성 큼)"
 
-        # 판별 로직(v116)이다
+        # 판별 로직(v117)이다
         if curr_p < support:
             groups['🚨위험'].append(info)
         elif is_hl:
@@ -88,18 +98,15 @@ for symbol, name in ticker_map.items():
                 groups['⚠️눌림(하락추세)'].append(info + " (주의)")
             else:
                 groups['💎눌림'].append(info + " 🔥")
-        elif is_breakout and not is_dead_cross:
+        elif is_breakout and is_golden_cross:
             groups['🚀슈퍼'].append(info + " 🔥")
         else:
-            # 저점이 낮아졌거나 브레이크아웃 실패, 혹은 하락 추세가 뜬 대기 종목이다
-            # 사용자의 요청대로 하락 추세군을 따로 만들지 않고 대기에 통합한다이다
-            if is_dead_cross:
-                info += " (데드크로스/하락 가능성 큼)"
-            groups['📦대기'].append(info)
+            # 박스권/대기 종목군으로 분류한다이다
+            groups['📦박스권'].append(info)
 
     except: continue
 
-report = f"🏛️ 다우 구조 및 데드크로스 분석 리포트 (v116)\n" + "="*25 + "\n\n"
+report = f"🏛️ 다우 구조 및 데드크로스 분석 리포트 (v117)\n" + "="*25 + "\n\n"
 report += "💡 가이드: 🔥는 정배열 상태, ⚠️눌림(하락추세)는 구조는 살아있으나 지표가 둔화된 상태이다.\n\n"
 
 order = ['🚀슈퍼', '💎눌림', '⚠️눌림(하락추세)', '📦박스권', '🚨위험']
