@@ -34,9 +34,17 @@ def get_structural_pivots(df, lookback=120, filter_size=3, mode='low'):
     return pivots
 
 ticker_map = { 
-    'NVDA': '엔비디아', 'TSLA': '테슬라', 'AAPL': '애플', 'MSFT': '마이크로소프트', 
-    'AMZN': '아마존', 'META': '메타', 'PLTR': '팔란티어', 'MSTR': '마이크로스트래티지', 
-    'COIN': '코인베이스', 'AMD': 'AMD', 'AVGO': '브로드컴', 'TSM': 'TSMC', 'MU': '마이크론'
+# 지수 및 레버리지
+    'QQQ': '나스닥100', 'TQQQ': '나스닥3배', 'SOXL': '반도체3배',
+    # 반도체 및 장비/소재 (코닝 추가됨)
+    'NVDA': '엔비디아', 'TSM': 'TSMC', 'AVGO': '브로드컴', 'ASML': 'ASML', 
+    'AMD': 'AMD', 'MU': '마이크론', 'GLW': '코닝', 'LRCX': '램리서치', 'AMAT': '어플라이드',
+    # AI 및 빅테크
+    'MSFT': '마이크로소프트', 'GOOGL': '알파벳', 'AMZN': '아마존', 'META': '메타', 
+    'AAPL': '애플', 'PLTR': '팔란티어', 'ORCL': '오라클',
+    # 유망 기술 및 인프라
+    'IONQ': '아이온큐', 'TSLA': '테슬라', 'MSTR': 'MSTR', 'COIN': '코인베이스',
+    'VST': '비스트라', 'CEG': '컨스텔레이션', 'ENPH': '엔페이즈'
 }
 
 # 종목군 정의 (키 이름을 박스권으로 통일했다이다)
