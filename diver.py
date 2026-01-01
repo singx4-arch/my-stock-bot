@@ -2,12 +2,14 @@ import yfinance as yf
 import pandas as pd
 import requests
 import os
+import json
 import numpy as np
 from datetime import datetime
 
-# 1. 환경 설정 및 텔레그램 연결이다
-token = os.getenv('TELEGRAM_TOKEN') or '7971022798:AAFGQR1zxdCq1urZKgdRzjjsvr3Lt6T9y1I'
+# 환경 설정이다
+token = os.getenv('TELEGRAM_TOKEN')
 chat_id = os.getenv('TELEGRAM_CHAT_ID')
+STATE_FILE = 'last_alerts.json'
 
 def send_message(text):
     if not token or not chat_id: return
@@ -17,80 +19,70 @@ def send_message(text):
         requests.get(url, params=params, timeout=10)
     except: pass
 
-# 전문가용 와일더 RSI 9일선 계산이다
 def calculate_rsi_9_wilder(data, window=9):
     delta = data.diff()
     up = delta.clip(lower=0)
     down = -1 * delta.clip(upper=0)
-    # Wilder's Smoothing 적용이다
     avg_gain = up.ewm(com=window-1, min_periods=window).mean()
     avg_loss = down.ewm(com=window-1, min_periods=window).mean()
     rs = avg_gain / avg_loss
     return 100 - (100 / (1 + rs))
 
-# 우물(Valley)과 산(Peak) 극점 기반 다이버전스 탐지이다
 def detect_divergence_1d(df):
-    # 과매수/과매도 필터링 구간이다
     df['in_low'] = df['RSI_9'] < 35
     df['in_high'] = df['RSI_9'] > 65
-    
     df['low_group'] = (df['in_low'] != df['in_low'].shift()).cumsum()
     df['high_group'] = (df['in_high'] != df['in_high'].shift()).cumsum()
     
-    valleys = []
-    peaks = []
-    
-    # 저점 구간(우물) 분석이다
+    valleys, peaks = [], []
     for g_id, group in df[df['in_low']].groupby('low_group'):
         if len(group) > 0:
             m_idx = group['RSI_9'].idxmin()
             valleys.append({'idx': m_idx, 'rsi': group['RSI_9'].min(), 'price': df['Low'].loc[m_idx]})
-            
-    # 고점 구간(산) 분석이다
     for g_id, group in df[df['in_high']].groupby('high_group'):
         if len(group) > 0:
             m_idx = group['RSI_9'].idxmax()
             peaks.append({'idx': m_idx, 'rsi': group['RSI_9'].max(), 'price': df['High'].loc[m_idx]})
 
     status = None
-    # 저점 비교 (상승 계열)이다
     if len(valleys) >= 2:
         v1, v2 = valleys[-2], valleys[-1]
-        if (v2['idx'] - v1['idx']).days < 60: # 60일 이내의 인접한 우물만 비교한다이다
-            if v2['price'] < v1['price'] and v2['rsi'] > v1['rsi']:
-                status = '일반 상승 (바닥 반전)'
-            elif v2['price'] > v1['price'] and v2['rsi'] < v1['rsi']:
-                status = '히든 상승 (추세 지속)'
-
-    # 고점 비교 (하락 계열)이다
+        if (v2['idx'] - v1['idx']).days < 60:
+            if v2['price'] < v1['price'] and v2['rsi'] > v1['rsi']: status = '일반 상승 (바닥 반전)'
+            elif v2['price'] > v1['price'] and v2['rsi'] < v1['rsi']: status = '히든 상승 (추세 지속)'
     if len(peaks) >= 2:
         p1, p2 = peaks[-2], peaks[-1]
         if (p2['idx'] - p1['idx']).days < 60:
-            if p2['price'] > p1['price'] and p2['rsi'] < p1['rsi']:
-                status = '일반 하락 (천장 반전)'
-            elif p2['price'] < p1['price'] and p2['rsi'] > p1['rsi']:
-                status = '히든 하락 (추세 하락)'
-            
+            if p2['price'] > p1['price'] and p2['rsi'] < p1['rsi']: status = '일반 하락 (천장 반전)'
+            elif p2['price'] < p1['price'] and p2['rsi'] > p1['rsi']: status = '히든 하락 (추세 하락)'
     return status
 
-def run_expert_1d_analysis():
+def main():
+    # 상태 파일 로드이다
+    if os.path.exists(STATE_FILE):
+        with open(STATE_FILE, 'r') as f:
+            last_alerts = json.load(f)
+    else:
+        last_alerts = {}
+
     ticker_map = {
-        'QQQ': '나스닥100', 'TQQQ': '나스닥3배', 'SOXL': '반도체3배', 'NVDA': '엔비디아',
-        'TSLA': '테슬라', 'AAPL': '애플', 'MSFT': '마이크로소프트', 'AMZN': '아마존',
-        'META': '메타', 'GOOGL': '구글', 'PLTR': '팔란티어', 'AMD': 'AMD',
-        'TSM': 'TSMC', 'AVGO': '브로드컴', 'MSTR': '마스텍', 'COIN': '코인베이스',
-        'IONQ': '아이온큐', 'VST': '비스트라', 'OKLO': '오클로', 'SMR': '뉴스케일',
-        'ANET': '아리스타', 'VRT': '버티브', 'DELL': '델', 'NFLX': '넷플릭스'
+        'QQQ': '나스닥100', 'TQQQ': '나스닥3배', 'SOXL': '반도체3배', 'SPY': 'S&P500',
+        'NVDA': '엔비디아', 'TSM': 'TSMC', 'AVGO': '브로드컴', 'ASML': 'ASML', 
+        'AMD': 'AMD', 'MU': '마이크론', 'AMAT': '어플라이드', 'LRCX': '램리서치', 
+        'QCOM': '퀄컴', 'ARM': 'ARM', 'SMCI': '슈퍼마이크로', 'INTC': '인텔',
+        'MSFT': '마이크로소프트', 'AAPL': '애플', 'AMZN': '아마존', 'META': '메타', 
+        'GOOGL': '구글', 'PLTR': '팔란티어', 'ORCL': '오라클', 'NOW': '서비스나우',
+        'ANET': '아리스타', 'VRT': '버티브', 'DELL': '델', 'IBM': 'IBM',
+        'TSLA': '테슬라', 'MSTR': '마이크로스트래티지', 'COIN': '코인베이스', 'IONQ': '아이온큐',
+        'NFLX': '넷플릭스', 'UBER': '우버', 'SHOP': '쇼피파이', 'HOOD': '로빈후드',
+        'VST': '비스트라', 'CEG': '컨스텔레이션', 'OKLO': '오클로', 'SMR': '뉴스케일',
+        'NLR': '우라늄ETF', 'XLE': '에너지ETF', 'GLW': '코닝'
     }
 
-    report_sections = {
-        '일반 상승 (바닥 반전)': [], '히든 상승 (추세 지속)': [],
-        '일반 하락 (천장 반전)': [], '히든 하락 (추세 하락)': []
-    }
+    new_alerts = last_alerts.copy()
 
     for symbol, name in ticker_map.items():
         try:
-            # 일봉(1d) 데이터를 1년치 가져온다이다
             df = yf.download(symbol, period='1y', interval='1d', progress=False)
             if len(df) < 50: continue
             if isinstance(df.columns, pd.MultiIndex): df.columns = df.columns.get_level_values(0)
@@ -98,21 +90,19 @@ def run_expert_1d_analysis():
             df['RSI_9'] = calculate_rsi_9_wilder(df['Close'])
             res = detect_divergence_1d(df)
             
-            if res:
-                report_sections[res].append(f"- {name}({symbol})")
+            # 신호가 바뀌었을 때만 알림 전송이다
+            if res and last_alerts.get(symbol) != res:
+                curr_rsi = round(df['RSI_9'].iloc[-1], 2)
+                msg = f"🔔 [NEW] {name}({symbol})\n유형: {res}\nRSI: {curr_rsi}"
+                send_message(msg)
+                new_alerts[symbol] = res
+            elif not res:
+                new_alerts[symbol] = None
         except: continue
 
-    report = "🏛️ 일봉 전용 전문가 다이버전스 리포트 (v139)\n"
-    report += f"분석 일시: {datetime.now().strftime('%Y-%m-%d %H:%M')}\n"
-    report += "-" * 35 + "\n\n"
-
-    for title, stocks in report_sections.items():
-        if stocks:
-            report += f"■ {title}\n"
-            report += "\n".join(stocks) + "\n\n"
-
-    report += "-" * 35 + "\n노이즈를 제거한 일봉 변곡점 분석을 마친다이다."
-    send_message(report)
+    # 새로운 상태 저장이다
+    with open(STATE_FILE, 'w') as f:
+        json.dump(new_alerts, f)
 
 if __name__ == "__main__":
-    run_expert_1d_analysis()
+    main()
