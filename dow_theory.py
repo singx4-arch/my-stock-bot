@@ -39,12 +39,11 @@ ticker_map = {
     'COIN': '코인베이스', 'AMD': 'AMD', 'AVGO': '브로드컴', 'TSM': 'TSMC', 'MU': '마이크론'
 }
 
-# 문자열 오류 방지를 위해 딕셔너리를 더 명확하게 정의했다이다
+# 하락 추세군을 제거하고 대기 종목군으로 통합했다이다
 groups = {
     '🚀슈퍼': [],
     '💎눌림': [],
     '⚠️눌림(하락추세)': [],
-    '📉하락추세': [],
     '📦대기': [],
     '🚨위험': []
 }
@@ -65,6 +64,7 @@ for symbol, name in ticker_map.items():
         curr_ma20 = float(df['MA20'].iloc[-1])
         curr_ma60 = float(df['MA60'].iloc[-1])
         
+        # 0.15% 근접 조건이 포함된 하락 추세 판정이다
         gap_ratio = (curr_smma7 - curr_ma20) / curr_ma20
         is_dead_cross = (curr_smma7 < curr_ma20) or (0 <= gap_ratio <= 0.0015)
         
@@ -80,25 +80,29 @@ for symbol, name in ticker_map.items():
         
         info = f"{name}({symbol}): {curr_p:.1f}$ (+{dist_to_sup:.1f}%)"
 
+        # 판별 로직(v116)이다
         if curr_p < support:
             groups['🚨위험'].append(info)
-        elif is_hl and is_dead_cross:
-            groups['⚠️눌림(하락추세)'].append(info + " (주의)")
-        elif is_hl and not is_dead_cross:
-            groups['💎눌림'].append(info + " 🔥")
+        elif is_hl:
+            if is_dead_cross:
+                groups['⚠️눌림(하락추세)'].append(info + " (주의)")
+            else:
+                groups['💎눌림'].append(info + " 🔥")
         elif is_breakout and not is_dead_cross:
             groups['🚀슈퍼'].append(info + " 🔥")
-        elif is_dead_cross:
-            groups['📉하락추세'].append(info)
         else:
+            # 저점이 낮아졌거나 브레이크아웃 실패, 혹은 하락 추세가 뜬 대기 종목이다
+            # 사용자의 요청대로 하락 추세군을 따로 만들지 않고 대기에 통합한다이다
+            if is_dead_cross:
+                info += " (데드크로스/하락 가능성 큼)"
             groups['📦대기'].append(info)
 
     except: continue
 
-report = f"🏛️ 다우 구조 및 데드크로스 분석 리포트 (v115)\n" + "="*25 + "\n\n"
-report += "💡 가이드: 🔥는 정배열 상태, ⚠️눌림(하락추세)는 구조는 살아있으나 지표가 꺾인 상태이다.\n\n"
+report = f"🏛️ 다우 구조 및 데드크로스 분석 리포트 (v116)\n" + "="*25 + "\n\n"
+report += "💡 가이드: 🔥는 정배열 상태, ⚠️눌림(하락추세)는 구조는 살아있으나 지표가 둔화된 상태이다.\n\n"
 
-order = ['🚀슈퍼', '💎눌림', '⚠️눌림(하락추세)', '📉하락추세', '📦대기', '🚨위험']
+order = ['🚀슈퍼', '💎눌림', '⚠️눌림(하락추세)', '📦대기', '🚨위험']
 for key in order:
     stocks = groups[key]
     report += f"{key} 종목군\n"
