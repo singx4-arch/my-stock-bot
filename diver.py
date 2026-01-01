@@ -3,9 +3,10 @@ import pandas as pd
 import requests
 import os
 import numpy as np
+import json
 from datetime import datetime
 
-# 텔레그램 설정이다
+# 1. 환경 설정
 token = os.getenv('TELEGRAM_TOKEN') or '7971022798:AAFGQR1zxdCq1urZKgdRzjjsvr3Lt6T9y1I'
 chat_id = os.getenv('TELEGRAM_CHAT_ID')
 
@@ -13,7 +14,10 @@ def send_message(text):
     if not token or not chat_id: return
     url = f"https://api.telegram.org/bot{token}/sendMessage"
     params = {'chat_id': chat_id, 'text': text}
-    requests.get(url, params=params)
+    try:
+        requests.get(url, params=params, timeout=10)
+    except:
+        pass
 
 def calculate_rsi(data, window=14):
     delta = data.diff()
@@ -22,8 +26,7 @@ def calculate_rsi(data, window=14):
     rs = gain / loss
     return 100 - (100 / (1 + rs))
 
-# 전문가 방식: 스윙 로우/하이 피벗 감지 함수이다
-def find_swings(series, window=5, mode='low'):
+def find_swings(series, window=4, mode='low'):
     swings = []
     for i in range(window, len(series) - window):
         is_swing = True
@@ -38,63 +41,74 @@ def find_swings(series, window=5, mode='low'):
             swings.append(i)
     return swings
 
-def analyze_divergence(symbol, name):
-    try:
-        # 데이터는 최근 6개월치면 충분하다이다
-        df = yf.download(symbol, period='6m', interval='1d', progress=False)
-        if len(df) < 50: return None
-        if isinstance(df.columns, pd.MultiIndex): df.columns = df.columns.get_level_values(0)
+# 2. 메인 분석 엔진이다
+def run_analysis():
+    ticker_map = {
+        'QQQ': '나스닥100', 'TQQQ': '나스닥3배', 'SOXL': '반도체3배',
+        'NVDA': '엔비디아', 'TSLA': '테슬라', 'AAPL': '애플', 'MSFT': '마이크로소프트',
+        'AMZN': '아마존', 'META': '메타', 'GOOGL': '구글', 'PLTR': '팔란티어',
+        'TSM': 'TSMC', 'MU': '마이크론', 'GLW': '코닝'
+    }
 
-        df['RSI'] = calculate_rsi(df['Close'])
-        df = df.dropna()
+    div_results = []
+    trend_results = []
 
-        # 최근 2개의 스윙 포인트를 추출한다이다
-        low_indices = find_swings(df['Low'], window=4, mode='low')
-        high_indices = find_swings(df['High'], window=4, mode='high')
+    for symbol, name in ticker_map.items():
+        try:
+            df = yf.download(symbol, period='1y', interval='1d', progress=False)
+            if len(df) < 100: continue
+            if isinstance(df.columns, pd.MultiIndex): df.columns = df.columns.get_level_values(0)
+            
+            # 이평선 및 RSI 계산이다
+            df['RSI'] = calculate_rsi(df['Close'])
+            df['SMMA7'] = df['Close'].ewm(alpha=1/7, adjust=False).mean()
+            df['MA20'] = df['Close'].rolling(window=20).mean()
+            df = df.dropna()
 
-        result = ""
+            curr_p = df['Close'].iloc[-1]
+            curr_s7 = df['SMMA7'].iloc[-1]
+            curr_m20 = df['MA20'].iloc[-1]
+            gap_ratio = (curr_s7 - curr_m20) / curr_m20
 
-        # 1. 상승 다이버전스 체크 (가격 저점 하락 + RSI 저점 상승)이다
-        if len(low_indices) >= 2:
-            i1, i2 = low_indices[-2], low_indices[-1]
-            # 최근 저점이 과거 저점보다 낮지만, RSI는 높은 경우이다
-            if df['Low'].iloc[i2] < df['Low'].iloc[i1] and df['RSI'].iloc[i2] > df['RSI'].iloc[i1]:
-                result = "📈 상승 다이버전스 (바닥 신호)"
+            # A. 다이버전스 분석이다
+            low_idx = find_swings(df['Low'], window=4, mode='low')
+            high_idx = find_swings(df['High'], window=4, mode='high')
+            
+            if len(low_idx) >= 2:
+                i1, i2 = low_idx[-2], low_idx[-1]
+                if df['Low'].iloc[i2] < df['Low'].iloc[i1] and df['RSI'].iloc[i2] > df['RSI'].iloc[i1]:
+                    div_results.append(f"- {name}({symbol}): 상승 다이버전스 포착")
+            
+            if len(high_idx) >= 2:
+                i1, i2 = high_idx[-2], high_idx[-1]
+                if df['High'].iloc[i2] > df['High'].iloc[i1] and df['RSI'].iloc[i2] < df['RSI'].iloc[i1]:
+                    div_results.append(f"- {name}({symbol}): 하락 다이버전스 포착")
 
-        # 2. 하락 다이버전스 체크 (가격 고점 상승 + RSI 고점 하락)이다
-        if len(high_indices) >= 2:
-            i1, i2 = high_indices[-2], high_indices[-1]
-            # 최근 고점이 과거 고점보다 높지만, RSI는 낮은 경우이다
-            if df['High'].iloc[i2] > df['High'].iloc[i1] and df['RSI'].iloc[i2] < df['RSI'].iloc[i1]:
-                result = "📉 하락 다이버전스 (천장 신호)"
+            # B. 0.15% 근접 및 추세 분석이다
+            is_dead = (curr_s7 < curr_m20) or (0 <= gap_ratio <= 0.0015)
+            if is_dead:
+                trend_results.append(f"- {name}({symbol}): 추세 둔화/데드 주의")
 
-        if result:
-            return f"{name}({symbol}): {result}"
-        return None
+        except Exception as e:
+            print(f"{symbol} 분석 오류: {e}")
 
-    except: return None
-
-# 분석할 핵심 종목 리스트이다
-ticker_map = {
-    'NVDA': '엔비디아', 'TSLA': '테슬라', 'AAPL': '애플', 'MSFT': '마이크로소프트',
-    'AMZN': '아마존', 'META': '메타', 'GOOGL': '구글', 'PLTR': '팔란티어',
-    'TQQQ': '나스닥3배', 'SOXL': '반도체3배', 'TSM': 'TSMC', 'MU': '마이크론'
-}
-
-print("다이버전스 정밀 분석 시작한다이다...")
-final_results = []
-
-for symbol, name in ticker_map.items():
-    res = analyze_divergence(symbol, name)
-    if res:
-        final_results.append(res)
-
-if final_results:
-    report = "🔍 전문가급 RSI 다이버전스 포착 리포트\n"
+    # 리포트 작성이다
+    report = "🏛️ 통합 마켓 구조 분석 리포트\n"
+    report += f"분석 일시: {datetime.now().strftime('%Y-%m-%d %H:%M')}\n"
     report += "------------------------------\n\n"
-    report += "\n\n".join(final_results)
-    report += "\n\n------------------------------\n"
-    report += "위 신호는 추세 반전의 강력한 힌트가 된다이다."
+
+    report += "■ RSI 다이버전스 포착\n"
+    report += "\n".join(div_results) if div_results else "포착된 신호 없음"
+    report += "\n\n"
+
+    report += "■ 0.15% 이평선 근접 (추세 주의)\n"
+    report += "\n".join(trend_results) if trend_results else "모든 종목 추세 양호"
+    report += "\n\n"
+
+    report += "------------------------------\n"
+    report += "분석 완료이다."
+    
     send_message(report)
-else:
-    print("현재 포착된 다이버전스 종목이 없다이다.")
+
+if __name__ == "__main__":
+    run_analysis()
