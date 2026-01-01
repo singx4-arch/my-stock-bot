@@ -6,7 +6,7 @@ import numpy as np
 import json
 from datetime import datetime
 
-# 1. 환경 설정 및 세션 로드
+# 1. 환경 설정 및 세션 로드이다
 token = os.getenv('TELEGRAM_TOKEN') or '7971022798:AAFGQR1zxdCq1urZKgdRzjjsvr3Lt6T9y1I'
 chat_id = os.getenv('TELEGRAM_CHAT_ID')
 SENT_ALERTS_FILE = 'sent_alerts.json'
@@ -25,64 +25,10 @@ def save_sent_alerts(sent_alerts):
 def send_message(text):
     if not token or not chat_id: return
     url = f"https://api.telegram.org/bot{token}/sendMessage"
-    params = {'chat_id': chat_id, 'text': text} # 마크다운은 특수문자 오류가 잦아 일반 텍스트로 보낸다이다
+    params = {'chat_id': chat_id, 'text': text}
     requests.get(url, params=params)
 
-def calculate_rsi(data, window=14):
-    delta = data.diff()
-    gain = (delta.where(delta > 0, 0)).rolling(window=window).mean()
-    loss = (-delta.where(delta < 0, 0)).rolling(window=window).mean()
-    rs = gain / loss
-    return 100 - (100 / (1 + rs))
-
-# 전문가 방식: 피벗 포인트를 이용한 다이버전스 감지 함수이다
-def detect_divergence(df, window=5):
-    # window는 좌우 몇 개의 캔들보다 높거나 낮아야 하는지를 결정한다이다
-    bull_div = False
-    bear_div = False
-    
-    # 최근 2개의 저점/고점 피벗을 찾는다이다
-    low_pivots = []
-    high_pivots = []
-    
-    # 캔들 끝부분(최근 캔들)부터 역순으로 스캔하여 피벗을 탐색한다이다
-    for i in range(len(df) - window - 1, window, -1):
-        # 저점 피벗 확인 (Low 기준)
-        is_low_pivot = True
-        for j in range(1, window + 1):
-            if df['Low'].iloc[i] >= df['Low'].iloc[i-j] or df['Low'].iloc[i] >= df['Low'].iloc[i+j]:
-                is_low_pivot = False; break
-        if is_low_pivot:
-            low_pivots.append(i)
-        
-        # 고점 피벗 확인 (High 기준)
-        is_high_pivot = True
-        for j in range(1, window + 1):
-            if df['High'].iloc[i] <= df['High'].iloc[i-j] or df['High'].iloc[i] <= df['High'].iloc[i+j]:
-                is_high_pivot = False; break
-        if is_high_pivot:
-            high_pivots.append(i)
-            
-        if len(low_pivots) >= 2 and len(high_pivots) >= 2: break
-
-    # 일반 상승 다이버전스 (Regular Bullish): 가격 저점 낮아짐 + RSI 저점 높아짐
-    if len(low_pivots) >= 2:
-        p1, p2 = low_pivots[1], low_pivots[0] # p1이 과거, p2가 최근
-        if df['Low'].iloc[p2] < df['Low'].iloc[p1] and df['RSI'].iloc[p2] > df['RSI'].iloc[p1]:
-            # 마지막 캔들이 최근 피벗 이후 반등 중인지 확인한다이다
-            if df['Close'].iloc[-1] > df['Low'].iloc[p2]:
-                bull_div = True
-                
-    # 일반 하락 다이버전스 (Regular Bearish): 가격 고점 높아짐 + RSI 고점 낮아짐
-    if len(high_pivots) >= 2:
-        p1, p2 = high_pivots[1], high_pivots[0]
-        if df['High'].iloc[p2] > df['High'].iloc[p1] and df['RSI'].iloc[p2] < df['RSI'].iloc[p1]:
-            if df['Close'].iloc[-1] < df['High'].iloc[p2]:
-                bear_div = True
-                
-    return bull_div, bear_div
-
-# 기존 추세선 로직들이다 (수정 없이 유지)
+# 추세선 분석을 위한 피벗 탐색 함수이다
 def get_pivots(df, lookback=60, filter_size=3, gap=5, mode='low'):
     pivots = []
     prices = df['Low'] if mode == 'low' else df['High']
@@ -102,6 +48,7 @@ def get_pivots(df, lookback=60, filter_size=3, gap=5, mode='low'):
             if len(pivots) == 2: break
     return pivots
 
+# 지지선 이탈 및 리테스트 확인 함수이다
 def check_true_retest(df, pivots, label):
     if len(pivots) < 2: return None
     p2, p1 = pivots[0], pivots[1] 
@@ -121,6 +68,7 @@ def check_true_retest(df, pivots, label):
         return f"🚨 {label} 이탈 상태 (주의 요망)"
     return None
 
+# 저항선 돌파 및 지지 확인 함수이다
 def check_resistance_status(df, res_pivots):
     if len(res_pivots) < 2: return None
     p2, p1 = res_pivots[0], res_pivots[1]
@@ -164,24 +112,7 @@ for symbol, name in ticker_map.items():
         if len(df_d) < 200: continue
         if isinstance(df_d.columns, pd.MultiIndex): df_d.columns = df_d.columns.get_level_values(0)
         
-        df_d['RSI'] = calculate_rsi(df_d['Close'])
-        
-        # 1. 전문가급 다이버전스 분석 적용이다
-        bull_div, bear_div = detect_divergence(df_d, window=5)
-        
-        if bull_div:
-            sig_key = f"{symbol}_BULL_DIV"
-            if sig_key not in sent_alerts['alerts']:
-                new_alerts.append(f"📈 {name}({symbol}): [전문가] RSI 상승 다이버전스 포착!!")
-                sent_alerts['alerts'].append(sig_key)
-        
-        if bear_div:
-            sig_key = f"{symbol}_BEAR_DIV"
-            if sig_key not in sent_alerts['alerts']:
-                new_alerts.append(f"📉 {name}({symbol}): [전문가] RSI 하락 다이버전스 포착!!")
-                sent_alerts['alerts'].append(sig_key)
-
-        # 2 & 3. 추세선 및 저항선 로직 실행이다
+        # 1. 단기 지지선 분석이다
         st_pivots = get_pivots(df_d, lookback=60, filter_size=3, gap=5, mode='low')
         st_msg = check_true_retest(df_d, st_pivots, "단기 지지선")
         if st_msg:
@@ -190,14 +121,16 @@ for symbol, name in ticker_map.items():
                 new_alerts.append(f"🛡️ {name}({symbol}): {st_msg}")
                 sent_alerts['alerts'].append(sig_key)
 
+        # 2. 장기 지지선 분석이다
         lt_pivots = get_pivots(df_d, lookback=180, filter_size=15, gap=20, mode='low')
         lt_msg = check_true_retest(df_d, lt_pivots, "장기 지지선")
         if lt_msg:
             sig_key = f"{symbol}_LT_RETEST"
             if sig_key not in sent_alerts['alerts']:
-                new_alerts.append(f"🏰 {name}({symbol}): {lt_msg}")
+                new_alerts.append(f"Castle {name}({symbol}): {lt_msg}")
                 sent_alerts['alerts'].append(sig_key)
 
+        # 3. 장기 저항선 분석이다
         res_pivots = get_pivots(df_d, lookback=150, filter_size=15, gap=15, mode='high')
         res_msg = check_resistance_status(df_d, res_pivots)
         if res_msg:
@@ -209,6 +142,6 @@ for symbol, name in ticker_map.items():
     except Exception as e: continue
 
 if new_alerts:
-    msg = "⚖️ 봇의 종합 추세 및 전문가 다이버전스 알림\n" + "-" * 20 + "\n" + "\n\n".join(new_alerts)
+    msg = "⚖️ 봇의 종합 추세 및 라인 리테스트 알림\n" + "-" * 20 + "\n" + "\n\n".join(new_alerts)
     send_message(msg)
     save_sent_alerts(sent_alerts)
