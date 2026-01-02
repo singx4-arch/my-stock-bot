@@ -7,6 +7,7 @@ import numpy as np
 from datetime import datetime
 from bs4 import BeautifulSoup
 
+# 1. 환경 설정 및 세션 관리이다
 token = os.getenv('TELEGRAM_TOKEN') or '7971022798:AAFGQR1zxdCq1urZKgdRzjjsvr3Lt6T9y1I'
 chat_id = os.getenv('TELEGRAM_CHAT_ID')
 SENT_ALERTS_FILE = 'sent_alerts.json'
@@ -29,112 +30,111 @@ def save_sent_alerts(sent_alerts):
     with open(SENT_ALERTS_FILE, 'w') as f:
         json.dump(sent_alerts, f)
 
-# 종목 리스트를 더 공격적으로 가져오도록 수정했다이다
+# 섹터별 종목 매핑 정보이다
+SECTOR_MAP = {
+    '에너지-원자력': ['CCJ', 'CEG', 'SMR', 'OKLO', 'BWXT', 'NNE'],
+    '소재-리튬/광물': ['ALB', 'FCX', 'LAC', 'ALTM', 'GLW', 'DD', 'NUE', 'STLD'],
+    '방위산업': ['LMT', 'RTX', 'NOC', 'BA', 'GD', 'HWM'],
+    '해운물류': ['ZIM', 'FRO', 'DSX', 'SBLK'],
+    '에너지-전통': ['XOM', 'CVX', 'COP', 'SLB', 'VLO'],
+    '반도체-장비/소재': ['ASML', 'AMAT', 'LRCX', 'KLAC', 'TSM', 'MU']
+}
+
 def fetch_mega_universe():
-    universe = []
-    headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'}
-    
-    # 1. S&P 500 리스트이다
-    try:
-        sp500 = pd.read_html('https://en.wikipedia.org/wiki/List_of_S%26P_500_companies')[0]
-        universe.extend(sp500['Symbol'].tolist())
-    except: pass
-    
-    # 2. NASDAQ 100 리스트이다
+    universe_info = {} 
     try:
         nasdaq100 = pd.read_html('https://en.wikipedia.org/wiki/Nasdaq-100')[4]
-        universe.extend(nasdaq100['Ticker'].tolist())
-    except: pass
-    
-    # 3. 야후 파이낸스 실시간 데이터이다
-    urls = [
-        "https://finance.yahoo.com/most-active",
-        "https://finance.yahoo.com/gainers",
-        "https://finance.yahoo.com/trending-tickers"
-    ]
-    for url in urls:
-        try:
-            resp = requests.get(url, headers=headers, timeout=15)
-            soup = BeautifulSoup(resp.text, 'html.parser')
-            for row in soup.find_all('tr'):
-                tag = row.find('a')
-                if tag:
-                    symbol = tag.text.strip()
-                    if symbol and len(symbol) < 6: universe.append(symbol)
-        except: continue
-        
-    # 만약 위 과정이 모두 실패했다면 기본 리스트를 반환한다이다
-    if not universe:
-        universe = ['AAPL', 'MSFT', 'NVDA', 'TSLA', 'MU', 'AMD', 'PLTR', 'BITO', 'MARA', 'RIOT', 'COIN', 'SOXL', 'TQQQ']
-        
-    return list(set([s.replace('.', '-') for s in universe]))
+        for ticker in nasdaq100['Ticker'].tolist():
+            universe_info[ticker.replace('.', '-')] = '나스닥100'
+        for sector, tickers in SECTOR_MAP.items():
+            for t in tickers:
+                universe_info[t] = sector
+    except:
+        universe_info = {'NVDA': '나스닥100', 'TSLA': '나스닥100', 'GLW': '소재-광물', 'CCJ': '에너지-원자력'}
+    return universe_info
 
-def get_accumulation_score(symbol):
+def calculate_rsi(series, period=14):
+    delta = series.diff()
+    up = delta.clip(lower=0)
+    down = -1 * delta.clip(upper=0)
+    ma_up = up.ewm(com=period-1, min_periods=period).mean()
+    ma_down = down.ewm(com=period-1, min_periods=period).mean()
+    rs = ma_up / ma_down
+    return 100 - (100 / (1 + rs))
+
+# 주봉 RSI 및 매집 점수를 통합 분석하는 함수이다
+def analyze_ticker(symbol):
     try:
-        df = yf.download(symbol, period='1y', interval='1d', progress=False)
-        if len(df) < 150: return None
-        if isinstance(df.columns, pd.MultiIndex): df.columns = df.columns.get_level_values(0)
+        # 1. 주봉 데이터 분석 (RSI 35 이하 체크)이다
+        df_w = yf.download(symbol, period='2y', interval='1wk', progress=False)
+        if len(df_w) < 20: return None
+        if isinstance(df_w.columns, pd.MultiIndex): df_w.columns = df_w.columns.get_level_values(0)
         
-        # 박스권 범위이다
-        recent_6mo = df.iloc[-120:]
-        box_range = (recent_6mo['High'].max() - recent_6mo['Low'].min()) / df['Close'].iloc[-1]
+        rsi_w = calculate_rsi(df_w['Close']).iloc[-1]
+        is_macro_bottom = rsi_w <= 35
         
-        # OBV 상승세이다
-        obv = (np.sign(df['Close'].diff()) * df['Volume']).fillna(0).cumsum()
+        # 2. 일봉 데이터 분석 (매집 점수 계산)이다
+        df_d = yf.download(symbol, period='1y', interval='1d', progress=False)
+        if len(df_d) < 150: return None
+        if isinstance(df_d.columns, pd.MultiIndex): df_d.columns = df_d.columns.get_level_values(0)
+        
+        recent_6mo = df_d.iloc[-120:]
+        box_range = (recent_6mo['High'].max() - recent_6mo['Low'].min()) / df_d['Close'].iloc[-1]
+        
+        obv = (np.sign(df_d['Close'].diff()) * df_d['Volume']).fillna(0).cumsum()
         obv_slope = (obv.iloc[-1] - obv.iloc[-20]) / (obv.iloc[-20:].mean() + 1e-9)
         
-        # 이평선 밀집도이다
-        ma20 = df['Close'].rolling(window=20).mean().iloc[-1]
-        ma50 = df['Close'].rolling(window=50).mean().iloc[-1]
-        ma200 = df['Close'].rolling(window=200).mean().iloc[-1]
-        ma_list = [ma20, ma50, ma200]
-        ma_gap = (max(ma_list) - min(ma_list)) / (min(ma_list) + 1e-9)
+        ma20 = df_d['Close'].rolling(window=20).mean().iloc[-1]
+        ma50 = df_d['Close'].rolling(window=50).mean().iloc[-1]
+        ma200 = df_d['Close'].rolling(window=200).mean().iloc[-1]
+        ma_gap = (max([ma20, ma50, ma200]) - min([ma20, ma50, ma200])) / (min([ma20, ma50, ma200]) + 1e-9)
         
         score = 0
-        if box_range < 0.50: score += 40
+        if box_range < 0.45: score += 40
         if obv_slope > 0: score += 30
         if ma_gap < 0.20: score += 30
         
-        # 점수 커트라인을 60점으로 더 낮춰서 더 많은 종목을 보여준다이다
-        if score >= 60:
+        # 주봉 RSI가 바닥이거나 매집 점수가 60점 이상이면 보고한다이다
+        if is_macro_bottom or score >= 60:
+            status = ""
+            if is_macro_bottom: status += f"⚓ [대바닥: 주봉 RSI {rsi_w:.1f}] "
+            if score >= 60: status += f"📦 [매집: {score}점]"
+            
             return {
-                "score": score,
-                "msg": f"{score}점 | 박스: {box_range*100:.1f}% | 이평차: {ma_gap*100:.1f}%"
+                "msg": f"{symbol}: {status} (박스 {box_range*100:.1f}%, 이평차 {ma_gap*100:.1f}%)"
             }
     except: pass
     return None
 
 def main():
-    universe = fetch_mega_universe()
-    total_found = len(universe)
-    
+    universe_info = fetch_mega_universe()
     today_str = datetime.now().strftime('%Y-%m-%d')
     sent_alerts = load_sent_alerts()
     if sent_alerts.get('date') != today_str:
         sent_alerts = {'date': today_str, 'alerts': []}
 
-    discovered_acc = []
-    
-    # 분석 대상을 800개로 늘렸다이다
-    for symbol in universe[:800]:
-        res = get_accumulation_score(symbol)
+    sector_results = {}
+
+    for symbol, sector in universe_info.items():
+        res = analyze_ticker(symbol)
         if res:
-            # 중복 알람 방지용 키를 생성한다이다
-            sig_key = f"{symbol}_ACC_{res['score']}"
+            sig_key = f"{symbol}_V165" # 버전별 중복 방지이다
             if sig_key not in sent_alerts['alerts']:
-                discovered_acc.append((res['score'], f"📦 {symbol}: {res['msg']}"))
+                if sector not in sector_results:
+                    sector_results[sector] = []
+                sector_results[sector].append(res['msg'])
                 sent_alerts['alerts'].append(sig_key)
 
-    discovered_acc.sort(key=lambda x: x[0], reverse=True)
-
-    if discovered_acc:
-        report = f"🏛️ 전미 시장 전수조사 리포트 (v160)\n"
-        report += f"발견된 총 종목 수: {total_found}개\n"
-        report += f"분석 완료: {min(total_found, 800)}개\n"
+    if sector_results:
+        report = "🏛️ 나스닥100 및 전략 섹터 통합 리포트 (v165)\n"
+        report += f"분석 일시: {datetime.now().strftime('%Y-%m-%d %H:%M')}\n"
+        report += "⚓는 주봉 RSI 35 이하 대바닥, 📦는 매집 진행 중 신호이다.\n"
         report += "="*20 + "\n\n"
         
-        for _, m in discovered_acc[:30]: # 상위 30개로 대폭 늘렸다이다
-            report += m + "\n"
+        for sector in sorted(sector_results.keys()):
+            report += f"[{sector}]\n"
+            report += "\n".join(sector_results[sector])
+            report += "\n\n"
 
         send_message(report)
         save_sent_alerts(sent_alerts)
