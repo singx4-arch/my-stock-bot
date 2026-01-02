@@ -59,11 +59,11 @@ def detect_divergence_1d(df):
 def main():
     if os.path.exists(STATE_FILE):
         with open(STATE_FILE, 'r') as f:
-            last_alerts = json.load(f)
+            try: last_alerts = json.load(f)
+            except: last_alerts = {}
     else:
         last_alerts = {}
 
-    # 유형별 이모지 및 접두사 설정이다
     emoji_map = {
         '일반 상승 (바닥 반전)': '🆘 [강력 매수/바닥 포착]',
         '히든 상승 (추세 지속)': '📈 [추세 지속/눌림목]',
@@ -85,7 +85,11 @@ def main():
         'NLR': '우라늄ETF', 'XLE': '에너지ETF', 'GLW': '코닝'
     }
 
+    # 신호들을 담을 딕셔너리이다
+    report_data = {key: [] for key in emoji_map.keys()}
     new_alerts = last_alerts.copy()
+    any_new_signal = False
+
     for symbol, name in ticker_map.items():
         try:
             df = yf.download(symbol, period='1y', interval='1d', progress=False)
@@ -94,19 +98,32 @@ def main():
             df['RSI_9'] = calculate_rsi_9_wilder(df['Close'])
             res = detect_divergence_1d(df)
             
+            # 신호가 있고 이전 신호와 다를 경우에만 리포트에 추가한다이다
             if res and last_alerts.get(symbol) != res:
                 curr_rsi = round(df['RSI_9'].iloc[-1], 2)
-                # 설정한 이모지 맵에서 문구를 가져온다이다
-                title = emoji_map.get(res, '🔔 [신호 발생]')
-                msg = f"{title}\n\n종목: {name}({symbol})\n유형: {res}\nRSI: {curr_rsi}"
-                send_message(msg)
+                report_data[res].append(f"• {name}({symbol}) | RSI: {curr_rsi}")
                 new_alerts[symbol] = res
+                any_new_signal = True
             elif not res:
                 new_alerts[symbol] = None
         except: continue
 
-    with open(STATE_FILE, 'w') as f:
-        json.dump(new_alerts, f)
+    # 새로운 신호가 하나라도 있으면 리포트를 작성한다이다
+    if any_new_signal:
+        report = "🏛️ 시장 다이버전스 통합 리포트\n"
+        report += f"분석 일시: {datetime.now().strftime('%Y-%m-%d %H:%M')}\n"
+        report += "="*20 + "\n\n"
+
+        for status, signals in report_data.items():
+            if signals:
+                report += f"{emoji_map[status]}\n"
+                report += "\n".join(signals) + "\n\n"
+
+        send_message(report)
+        
+        # 상태 업데이트 및 저장이다
+        with open(STATE_FILE, 'w') as f:
+            json.dump(new_alerts, f)
 
 if __name__ == "__main__":
     main()
