@@ -11,6 +11,12 @@ token = os.getenv('TELEGRAM_TOKEN') or '7971022798:AAFGQR1zxdCq1urZKgdRzjjsvr3Lt
 chat_id = os.getenv('TELEGRAM_CHAT_ID')
 SENT_ALERTS_FILE = 'sent_alerts.json'
 
+def main():
+    # 텔레그램 연결 테스트용 메시지이다 (이것마저 안 오면 토큰이나 ID 문제이다)
+    send_message("🤖 나 지금 시장 감시 시작했다! 연결은 문제없다.") 
+
+    universe = [ ... ]
+    
 def send_message(text):
     if not token or not chat_id: return
     url = f"https://api.telegram.org/bot{token}/sendMessage"
