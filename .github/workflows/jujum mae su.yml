@@ -2,8 +2,12 @@ name: 저점 매수 및 폭발 감지 봇
 
 on:
   schedule:
-    - cron: '0 * * * *'  # 5분은 종목이 너무 많아 과부하가 걸릴 수 있어 매시간 정각으로 변경했다이다
-  workflow_dispatch:
+    - cron: '0 * * * *'  # 매시간 정각 실행이다
+  workflow_dispatch:      # 수동 실행이다
+
+# 봇에게 쓰기 권한을 명시적으로 부여한다이다
+permissions:
+  contents: write
 
 jobs:
   build:
@@ -18,7 +22,7 @@ jobs:
           python-version: '3.10'
 
       - name: Install dependencies
-        # 시장 데이터를 긁어오기 위한 beautifulsoup4, lxml, html5lib를 추가했다이다
+        # 시장 전체 분석을 위한 라이브러리들도 모두 포함했다이다
         run: pip install yfinance pandas requests numpy beautifulsoup4 lxml html5lib
 
       - name: Run script
