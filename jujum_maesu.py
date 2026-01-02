@@ -32,35 +32,35 @@ def save_sent_alerts(sent_alerts):
     with open(SENT_ALERTS_FILE, 'w') as f:
         json.dump(sent_alerts, f)
 
-# 실시간으로 시장의 핫한 종목들을 긁어오는 함수이다
-def fetch_discovery_universe():
-    urls = [
-        "https://finance.yahoo.com/trending-tickers",
-        "https://finance.yahoo.com/most-active",
-        "https://finance.yahoo.com/gainers"
-    ]
+# 시장 전체 종목 리스트를 긁어오는 함수이다
+def fetch_mega_universe():
+    universe = []
     headers = {'User-Agent': 'Mozilla/5.0'}
-    discovered_tickers = []
-    
-    # 기본 감시 종목이다 (우량주)
-    base_list = ['NVDA', 'TSLA', 'AAPL', 'MSFT', 'AMZN', 'META', 'GOOGL', 'AVGO', 'MU', 'AMD', 'TSM', 'PLTR', 'MSTR', 'COIN', 'TQQQ', 'SOXL']
-    discovered_tickers.extend(base_list)
-    
-    for url in urls:
-        try:
+    try:
+        # S&P 500 리스트이다
+        sp500 = pd.read_html('https://en.wikipedia.org/wiki/List_of_S%26P_500_companies')[0]
+        universe.extend(sp500['Symbol'].tolist())
+        
+        # NASDAQ 100 리스트이다
+        nasdaq100 = pd.read_html('https://en.wikipedia.org/wiki/Nasdaq-100')[4]
+        universe.extend(nasdaq100['Ticker'].tolist())
+        
+        # 야후 파이낸스 실시간 수급주이다
+        for url in ["https://finance.yahoo.com/most-active", "https://finance.yahoo.com/gainers", "https://finance.yahoo.com/trending-tickers"]:
             resp = requests.get(url, headers=headers, timeout=10)
             soup = BeautifulSoup(resp.text, 'html.parser')
-            # 야후 파이낸스 테이블에서 티커를 추출한다이다
             for row in soup.find_all('tr'):
                 tag = row.find('a')
                 if tag:
                     symbol = tag.text.strip()
-                    if symbol and len(symbol) < 6: # 지수 제외 개별 종목 위주이다
-                        discovered_tickers.append(symbol)
-        except:
-            continue
-            
-    return list(set(discovered_tickers)) # 중복 제거이다
+                    if symbol and len(symbol) < 6:
+                        universe.append(symbol)
+    except:
+        universe.extend(['AAPL', 'MSFT', 'NVDA', 'TSLA', 'MU', 'AMD', 'PLTR', 'TQQQ', 'SOXL'])
+        
+    # 중복 제거 및 티커 포맷 수정(BRK.B -> BRK-B)이다
+    clean_universe = list(set([s.replace('.', '-') for s in universe]))
+    return clean_universe
 
 def calculate_rsi(series, period=14):
     delta = series.diff()
@@ -71,14 +71,13 @@ def calculate_rsi(series, period=14):
     rs = ma_up / ma_down
     return 100 - (100 / (1 + rs))
 
-# ⚓ 찐바닥 및 매크로 바닥 감지 (주봉 필터 적용)이다
+# ⚓ 대바닥 감지이다
 def detect_macro_bottom(symbol):
     try:
-        df_w = yf.download(symbol, period='5y', interval='1wk', progress=False)
+        df_w = yf.download(symbol, period='2y', interval='1wk', progress=False)
         if len(df_w) < 30: return None, None
         if isinstance(df_w.columns, pd.MultiIndex): df_w.columns = df_w.columns.get_level_values(0)
         
-        # 주봉 RSI $RSI = 100 - \frac{100}{1 + RS}$ 기반이다
         rsi_w = calculate_rsi(df_w['Close']).iloc[-1]
         
         if rsi_w <= 35:
@@ -90,55 +89,49 @@ def detect_macro_bottom(symbol):
             lower_band = (ma20 - (2 * std20)).iloc[-2]
             
             is_reentry = (df_d['Close'].iloc[-2] < lower_band) and (df_d['Close'].iloc[-1] > lower_band)
-            
             if is_reentry:
-                return f"⚓ 주봉 RSI {rsi_w:.1f} 대바닥 구간 및 일봉 반등 확인이다", "bottom"
-    except:
-        pass
+                return f"⚓ 주봉 RSI {rsi_w:.1f} 바닥 및 일봉 반등 확인이다", "bottom"
+    except: pass
     return None, None
 
-# 🚀 컵앤핸들 돌파 및 📦 에너지 응축 감지이다
+# 🚀 돌파 및 💎 응축 감지이다
 def detect_momentum_and_squeeze(symbol):
     try:
         df = yf.download(symbol, period='1y', interval='1d', progress=False)
-        if len(df) < 200: return None, None
+        if len(df) < 150: return None, None
         if isinstance(df.columns, pd.MultiIndex): df.columns = df.columns.get_level_values(0)
         
-        # 1. 🚀 돌파 (Cup and Handle)이다
+        # 1. 🚀 컵앤핸들 돌파이다
         recent_high = df['High'].iloc[-40:-1].max()
         curr_price = df['Close'].iloc[-1]
         avg_vol = df['Volume'].rolling(window=20).mean().iloc[-2]
         curr_vol = df['Volume'].iloc[-1]
         
         if curr_price > recent_high and curr_vol > avg_vol * 1.5:
-            return f"🚀 전고점 돌파 및 거래량 {curr_vol/avg_vol:.1f}배 실린 컵앤핸들 완성이다", "breakout"
+            return f"🚀 전고점 돌파 및 거래량 {curr_vol/avg_vol:.1f}배 폭발이다", "breakout"
         
-        # 2. 💎 에너지 응축 (VCP/Squeeze)이다
+        # 2. 💎 에너지 응축이다
         ma50 = df['Close'].rolling(window=50).mean().iloc[-1]
         ma200 = df['Close'].rolling(window=200).mean().iloc[-1]
         ma_gap = abs(ma50 - ma200) / ma200
         recent_range = (df['High'].iloc[-14:].max() - df['Low'].iloc[-14:].min()) / df['Close'].iloc[-1]
         
-        if ma_gap < 0.04 and recent_range < 0.08 and curr_vol < avg_vol:
-            return f"💎 이평선 밀집({ma_gap*100:.1f}%) 및 변동성 수축 중인 매집 구간이다", "squeeze"
-    except:
-        pass
+        if ma_gap < 0.05 and recent_range < 0.10 and curr_vol < avg_vol:
+            return f"💎 이평선 밀집 및 변동성 수축 매집 구간이다", "squeeze"
+    except: pass
     return None, None
 
 def main():
-    # 인터넷 실시간 검색을 통해 감시 리스트를 확보한다이다
-    universe = fetch_discovery_universe()
-    
+    universe = fetch_mega_universe()
     today_str = datetime.now().strftime('%Y-%m-%d')
     sent_alerts = load_sent_alerts()
-    
     if sent_alerts.get('date') != today_str:
         sent_alerts = {'date': today_str, 'alerts': []}
 
     report_data = {"breakout": [], "squeeze": [], "bottom": []}
 
-    for symbol in universe:
-        # 찐바닥 체크이다
+    # API 과부하 방지를 위해 상위 600개 종목으로 제한한다이다
+    for symbol in universe[:600]:
         msg, cat = detect_macro_bottom(symbol)
         if msg:
             sig_key = f"{symbol}_{cat}"
@@ -146,7 +139,6 @@ def main():
                 report_data[cat].append(f"⚓ {symbol}: {msg}")
                 sent_alerts['alerts'].append(sig_key)
         
-        # 돌파 및 응축 체크이다
         msg, cat = detect_momentum_and_squeeze(symbol)
         if msg:
             sig_key = f"{symbol}_{cat}"
@@ -154,17 +146,12 @@ def main():
                 report_data[cat].append(f"🔥 {symbol}: {msg}")
                 sent_alerts['alerts'].append(sig_key)
 
-    # 통합 리포트 발송이다
     if any(report_data.values()):
-        report = f"🏛️ 시장 전수조사 리포트 (v155)\n일시: {datetime.now().strftime('%Y-%m-%d %H:%M')}\n" + "="*20 + "\n\n"
-        
-        if report_data["breakout"]:
-            report += "🚀 [시세 분출: 컵앤핸들 돌파]\n" + "\n".join(report_data["breakout"]) + "\n\n"
-        if report_data["squeeze"]:
-            report += "💎 [에너지 응축: 매집 구간]\n" + "\n".join(report_data["squeeze"]) + "\n\n"
-        if report_data["bottom"]:
-            report += "⚓ [대바닥 포착: 주봉 RSI 35 이하]\n" + "\n".join(report_data["bottom"]) + "\n\n"
-            
+        report = "🏛️ 전미 시장 전수조사 리포트 (v156)\n"
+        report += f"분석 일시: {datetime.now().strftime('%Y-%m-%d %H:%M')}\n" + "="*20 + "\n\n"
+        if report_data["breakout"]: report += "🚀 [시세 분출]\n" + "\n".join(report_data["breakout"]) + "\n\n"
+        if report_data["squeeze"]: report += "💎 [에너지 응축]\n" + "\n".join(report_data["squeeze"]) + "\n\n"
+        if report_data["bottom"]: report += "⚓ [대바닥 포착]\n" + "\n".join(report_data["bottom"]) + "\n\n"
         send_message(report)
         save_sent_alerts(sent_alerts)
 
