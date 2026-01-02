@@ -97,16 +97,8 @@ report = f"🏛️ 주간/일간 통합 기술 분석 리포트\n"
 report += f"분석 일시: {datetime.now().strftime('%Y-%m-%d %H:%M')}\n"
 report += "-" * 25 + "\n\n"
 
-report += "■ 1. 주봉 RSI 30 부근 (과매도 대바닥)\n"
-report += ", ".join(rsi_bottom_list) if rsi_bottom_list else "해당 종목 없음"
-report += "\n\n"
-
-report += "■ 2. 주봉 추세 전환 (골든크로스 완료/임박)\n"
+report += "■ 주봉 추세 전환 (골든크로스 완료/임박)\n"
 report += ", ".join(trend_reversal_list) if trend_reversal_list else "해당 종목 없음"
-report += "\n\n"
-
-report += "■ 3. 일봉 베스트 추천 (20일선+7SMMA 상회)\n"
-report += ", ".join(top_recommend_list) if top_recommend_list else "해당 종목 없음"
 report += "\n\n"
 
 report += "-" * 25 + "\n"
