@@ -57,38 +57,41 @@ def calculate_rsi(series, period=14):
     rs = ma_up / ma_down
     return 100 - (100 / (1 + rs))
 
-# 🪙 코인식 바닥 매집(Accumulation) 감지 로직이다
-def detect_crypto_style_bottom(symbol):
+# 매집 상태를 점수로 환산하는 함수이다
+def get_accumulation_score(symbol):
     try:
         df = yf.download(symbol, period='1y', interval='1d', progress=False)
-        if len(df) < 250: return None, None
+        if len(df) < 200: return None
         if isinstance(df.columns, pd.MultiIndex): df.columns = df.columns.get_level_values(0)
         
-        # 1. 가격 범위 유연화 (6개월간 변동폭 35% 이내)이다
-        # 비트코인처럼 바닥에서 출렁이며 매집하는 구간을 잡기 위함이다
+        # 1. 박스권 범위 (6개월) - 45%까지 대폭 완화했다이다
         recent_6mo = df.iloc[-120:]
         box_range = (recent_6mo['High'].max() - recent_6mo['Low'].min()) / df['Close'].iloc[-1]
         
-        # 2. OBV(On-Balance Volume)를 통한 숨은 매집 확인이다
-        # 주가는 횡보하지만 거래량 에너지가 상승 중인지 확인한다이다
+        # 2. OBV 트렌드이다
         obv = (np.sign(df['Close'].diff()) * df['Volume']).fillna(0).cumsum()
         obv_slope = (obv.iloc[-1] - obv.iloc[-20]) / obv.iloc[-20:].mean()
         
-        # 3. 이평선 수렴도 계산이다
+        # 3. 이평선 밀집도 (20, 50, 200일선)이다
         ma20 = df['Close'].rolling(window=20).mean().iloc[-1]
         ma50 = df['Close'].rolling(window=50).mean().iloc[-1]
         ma200 = df['Close'].rolling(window=200).mean().iloc[-1]
         ma_list = [ma20, ma50, ma200]
-        
-        # 이평선 간격 수식이다
-        # $$Gap = \frac{\max(MA) - \min(MA)}{\min(MA)}$$
         ma_gap = (max(ma_list) - min(ma_list)) / min(ma_list)
         
-        # 조건: 6개월 변동폭 35% 이내 + OBV 우상향 + 이평선 10% 이내 밀집이다
-        if box_range < 0.35 and obv_slope > 0 and ma_gap < 0.10:
-            return f"🪙 코인식 바닥 매집 중이다. 6개월 변동폭 {box_range*100:.1f}%, OBV 상승세이다", "accumulation"
+        score = 0
+        if box_range < 0.45: score += 40  # 변동성 수축 점수이다
+        if obv_slope > 0: score += 30     # 거래량 매집 점수이다
+        if ma_gap < 0.15: score += 30      # 이평선 수렴 점수이다
+        
+        # 70점 이상이면 의미 있는 매집으로 본다이다
+        if score >= 70:
+            return {
+                "score": score,
+                "msg": f"점수: {score} | 박스권: {box_range*100:.1f}% | 이평선차: {ma_gap*100:.1f}%"
+            }
     except: pass
-    return None, None
+    return None
 
 def detect_macro_bottom(symbol):
     try:
@@ -102,7 +105,7 @@ def detect_macro_bottom(symbol):
             ma20 = df_d['Close'].rolling(window=20).mean(); std20 = df_d['Close'].rolling(window=20).std()
             lower_band = (ma20 - (2 * std20)).iloc[-2]
             if (df_d['Close'].iloc[-2] < lower_band) and (df_d['Close'].iloc[-1] > lower_band):
-                return f"⚓ 주봉 RSI {rsi_w:.1f} 대바닥 및 일봉 반등 확인이다", "macro_bottom"
+                return f"⚓ 주봉 RSI {rsi_w:.1f} 대바닥 확인이다", "macro_bottom"
     except: pass
     return None, None
 
@@ -113,26 +116,41 @@ def main():
     if sent_alerts.get('date') != today_str:
         sent_alerts = {'date': today_str, 'alerts': []}
 
-    report_data = {"accumulation": [], "macro_bottom": []}
+    discovered_acc = []
+    discovered_bottom = []
 
-    for symbol in universe[:650]:
-        # 1. 코인식 바닥 매집주 탐색이다
-        msg, cat = detect_crypto_style_bottom(symbol)
-        if msg and f"{symbol}_{cat}" not in sent_alerts['alerts']:
-            report_data[cat].append(f"🪙 {symbol}: {msg}")
-            sent_alerts['alerts'].append(f"{symbol}_{cat}")
+    # 700개 종목으로 범위를 넓혔다이다
+    for symbol in universe[:700]:
+        # 1. 매집 점수 체크이다
+        acc_res = get_accumulation_score(symbol)
+        if acc_res:
+            sig_key = f"{symbol}_ACC_{acc_res['score']}"
+            if sig_key not in sent_alerts['alerts']:
+                discovered_acc.append((acc_res['score'], f"📦 {symbol}: {acc_res['msg']}"))
+                sent_alerts['alerts'].append(sig_key)
         
-        # 2. 역사적 대바닥 종목 탐색이다
+        # 2. 대바닥 체크이다
         msg, cat = detect_macro_bottom(symbol)
         if msg and f"{symbol}_{cat}" not in sent_alerts['alerts']:
-            report_data[cat].append(f"⚓ {symbol}: {msg}")
+            discovered_bottom.append(f"⚓ {symbol}: {msg}")
             sent_alerts['alerts'].append(f"{symbol}_{cat}")
 
-    if any(report_data.values()):
-        report = "🏛️ 전미 시장 바닥 매집 및 대시세 준비주 리포트 (v158)\n"
+    # 점수 높은 순으로 정렬이다
+    discovered_acc.sort(key=lambda x: x[0], reverse=True)
+
+    if discovered_acc or discovered_bottom:
+        report = "🏛️ 전미 시장 통합 매집 분석 리포트 (v159)\n"
         report += f"분석 일시: {datetime.now().strftime('%Y-%m-%d %H:%M')}\n" + "="*20 + "\n\n"
-        if report_data["accumulation"]: report += "📦 [코인식 바닥 매집: OBV 상승 및 이평선 수렴]\n" + "\n".join(report_data["accumulation"]) + "\n\n"
-        if report_data["macro_bottom"]: report += "⚓ [역사적 바닥: 주봉 RSI 35 이하 공포 구간]\n" + "\n".join(report_data["macro_bottom"]) + "\n\n"
+        
+        if discovered_acc:
+            report += "📦 [매집 점수 상위 종목]\n"
+            for _, m in discovered_acc[:15]: # 상위 15개만 발송이다
+                report += m + "\n"
+            report += "\n"
+            
+        if discovered_bottom:
+            report += "⚓ [역사적 바닥 구간]\n" + "\n".join(discovered_bottom)
+
         send_message(report)
         save_sent_alerts(sent_alerts)
 
