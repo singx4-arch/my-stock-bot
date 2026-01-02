@@ -7,6 +7,7 @@ import numpy as np
 from datetime import datetime
 from bs4 import BeautifulSoup
 
+# 1. 환경 설정 및 세션 관리이다
 token = os.getenv('TELEGRAM_TOKEN') or '7971022798:AAFGQR1zxdCq1urZKgdRzjjsvr3Lt6T9y1I'
 chat_id = os.getenv('TELEGRAM_CHAT_ID')
 SENT_ALERTS_FILE = 'sent_alerts.json'
@@ -44,7 +45,7 @@ def fetch_mega_universe():
                 tag = row.find('a')
                 if tag: universe.append(tag.text.strip())
     except:
-        universe.extend(['AAPL', 'MSFT', 'NVDA', 'TSLA', 'MU', 'AMD', 'PLTR'])
+        universe.extend(['AAPL', 'MSFT', 'NVDA', 'TSLA', 'MU', 'AMD', 'PLTR', 'BITO', 'MARA'])
     return list(set([s.replace('.', '-') for s in universe]))
 
 def calculate_rsi(series, period=14):
@@ -56,36 +57,36 @@ def calculate_rsi(series, period=14):
     rs = ma_up / ma_down
     return 100 - (100 / (1 + rs))
 
-# 🏗️ 장기 응축(Long-term Squeeze) 감지 로직이다
-def detect_long_term_squeeze(symbol):
+# 🪙 코인식 바닥 매집(Accumulation) 감지 로직이다
+def detect_crypto_style_bottom(symbol):
     try:
-        # 최소 1년(250거래일)의 데이터가 필요하다이다
         df = yf.download(symbol, period='1y', interval='1d', progress=False)
         if len(df) < 250: return None, None
         if isinstance(df.columns, pd.MultiIndex): df.columns = df.columns.get_level_values(0)
         
-        # 1. 장기 이격도 수렴 확인이다
-        # 50일, 100일, 200일 이평선이 모두 10% 이내로 모였는지 확인한다이다
-        ma50 = df['Close'].rolling(window=50).mean().iloc[-1]
-        ma100 = df['Close'].rolling(window=100).mean().iloc[-1]
-        ma200 = df['Close'].rolling(window=200).mean().iloc[-1]
-        
-        ma_list = [ma50, ma100, ma200]
-        # 이평선 밀집도 계산 수식이다: 
-        # $$Gap = \frac{\max(MA_{50}, MA_{100}, MA_{200}) - \min(MA_{50}, MA_{100}, MA_{200})}{\min(MA_{50}, MA_{100}, MA_{200})}$$
-        ma_gap = (max(ma_list) - min(ma_list)) / min(ma_list)
-        
-        # 2. 장기 박스권 확인 (최근 6개월/120일간의 가격 변동 폭)이다
+        # 1. 가격 범위 유연화 (6개월간 변동폭 35% 이내)이다
+        # 비트코인처럼 바닥에서 출렁이며 매집하는 구간을 잡기 위함이다
         recent_6mo = df.iloc[-120:]
         box_range = (recent_6mo['High'].max() - recent_6mo['Low'].min()) / df['Close'].iloc[-1]
         
-        # 3. 거래량 메마름 확인 (최근 1개월 거래량이 연간 평균보다 적음)이다
-        vol_avg_y = df['Volume'].mean()
-        vol_avg_m = df['Volume'].iloc[-20:].mean()
+        # 2. OBV(On-Balance Volume)를 통한 숨은 매집 확인이다
+        # 주가는 횡보하지만 거래량 에너지가 상승 중인지 확인한다이다
+        obv = (np.sign(df['Close'].diff()) * df['Volume']).fillna(0).cumsum()
+        obv_slope = (obv.iloc[-1] - obv.iloc[-20]) / obv.iloc[-20:].mean()
         
-        # 조건: 이평선이 8% 이내 밀집 + 6개월간 주가 변동 20% 이내 + 거래량 진정이다
-        if ma_gap < 0.08 and box_range < 0.20 and vol_avg_m < vol_avg_y:
-            return f"🏗️ 장기 매집 포착이다. 6개월 박스권 범위 {box_range*100:.1f}% 및 장기 이평선 밀집 상태이다", "long_squeeze"
+        # 3. 이평선 수렴도 계산이다
+        ma20 = df['Close'].rolling(window=20).mean().iloc[-1]
+        ma50 = df['Close'].rolling(window=50).mean().iloc[-1]
+        ma200 = df['Close'].rolling(window=200).mean().iloc[-1]
+        ma_list = [ma20, ma50, ma200]
+        
+        # 이평선 간격 수식이다
+        # $$Gap = \frac{\max(MA) - \min(MA)}{\min(MA)}$$
+        ma_gap = (max(ma_list) - min(ma_list)) / min(ma_list)
+        
+        # 조건: 6개월 변동폭 35% 이내 + OBV 우상향 + 이평선 10% 이내 밀집이다
+        if box_range < 0.35 and obv_slope > 0 and ma_gap < 0.10:
+            return f"🪙 코인식 바닥 매집 중이다. 6개월 변동폭 {box_range*100:.1f}%, OBV 상승세이다", "accumulation"
     except: pass
     return None, None
 
@@ -101,7 +102,7 @@ def detect_macro_bottom(symbol):
             ma20 = df_d['Close'].rolling(window=20).mean(); std20 = df_d['Close'].rolling(window=20).std()
             lower_band = (ma20 - (2 * std20)).iloc[-2]
             if (df_d['Close'].iloc[-2] < lower_band) and (df_d['Close'].iloc[-1] > lower_band):
-                return f"⚓ 주봉 RSI {rsi_w:.1f} 바닥 및 일봉 반등 확인이다", "bottom"
+                return f"⚓ 주봉 RSI {rsi_w:.1f} 대바닥 및 일봉 반등 확인이다", "macro_bottom"
     except: pass
     return None, None
 
@@ -112,27 +113,26 @@ def main():
     if sent_alerts.get('date') != today_str:
         sent_alerts = {'date': today_str, 'alerts': []}
 
-    report_data = {"long_squeeze": [], "bottom": []}
+    report_data = {"accumulation": [], "macro_bottom": []}
 
-    # 분석 대상을 600개로 확대했다이다
-    for symbol in universe[:600]:
-        # 장기 응축 체크이다
-        msg, cat = detect_long_term_squeeze(symbol)
+    for symbol in universe[:650]:
+        # 1. 코인식 바닥 매집주 탐색이다
+        msg, cat = detect_crypto_style_bottom(symbol)
         if msg and f"{symbol}_{cat}" not in sent_alerts['alerts']:
-            report_data[cat].append(f"🏗️ {symbol}: {msg}")
+            report_data[cat].append(f"🪙 {symbol}: {msg}")
             sent_alerts['alerts'].append(f"{symbol}_{cat}")
         
-        # 매크로 바닥 체크이다
+        # 2. 역사적 대바닥 종목 탐색이다
         msg, cat = detect_macro_bottom(symbol)
         if msg and f"{symbol}_{cat}" not in sent_alerts['alerts']:
             report_data[cat].append(f"⚓ {symbol}: {msg}")
             sent_alerts['alerts'].append(f"{symbol}_{cat}")
 
     if any(report_data.values()):
-        report = "🏛️ 전미 시장 장기 응축 및 바닥 탐색 리포트 (v157)\n"
+        report = "🏛️ 전미 시장 바닥 매집 및 대시세 준비주 리포트 (v158)\n"
         report += f"분석 일시: {datetime.now().strftime('%Y-%m-%d %H:%M')}\n" + "="*20 + "\n\n"
-        if report_data["long_squeeze"]: report += "🏗️ [장기 에너지 응축: 대시세 준비주]\n" + "\n".join(report_data["long_squeeze"]) + "\n\n"
-        if report_data["bottom"]: report += "⚓ [대바닥 포착: 주봉 RSI 35 이하]\n" + "\n".join(report_data["bottom"]) + "\n\n"
+        if report_data["accumulation"]: report += "📦 [코인식 바닥 매집: OBV 상승 및 이평선 수렴]\n" + "\n".join(report_data["accumulation"]) + "\n\n"
+        if report_data["macro_bottom"]: report += "⚓ [역사적 바닥: 주봉 RSI 35 이하 공포 구간]\n" + "\n".join(report_data["macro_bottom"]) + "\n\n"
         send_message(report)
         save_sent_alerts(sent_alerts)
 
