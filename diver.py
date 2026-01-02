@@ -10,7 +10,6 @@ chat_id = os.getenv('TELEGRAM_CHAT_ID')
 def send_message(text):
     if not token or not chat_id: return
     url = f"https://api.telegram.org/bot{token}/sendMessage"
-    # 메시지가 길어질 수 있으므로 나누어 보내는 처리가 필요할 수 있음
     params = {'chat_id': chat_id, 'text': text, 'disable_notification': 'true'}
     try: requests.post(url, json=params, timeout=15)
     except: pass
@@ -31,70 +30,48 @@ def detect_divergence_final(df, rsi, curr_rsi_w):
     length = len(df)
     
     valleys, peaks = [], []
-    in_low, in_high = False, False
-    curr_v, curr_p = None, None
+    
+    # 해결책: 5일 간격으로 로컬 최저점/최고점을 찾아 더 촘촘하게 데이터를 수집한다이다
+    for i in range(max(5, length - 120), length - 5):
+        # 저점 후보 (주변 5일보다 낮음)이다
+        if rsi.iloc[i] < 45 and all(rsi.iloc[i] <= rsi.iloc[i+j] for j in range(-5, 6)):
+            valleys.append({'idx': i, 'rsi': rsi.iloc[i], 'price': lows[i], 'vol': volumes[i]})
+        # 고점 후보 (주변 5일보다 높음)이다
+        if rsi.iloc[i] > 55 and all(rsi.iloc[i] >= rsi.iloc[i+j] for j in range(-5, 6)):
+            peaks.append({'idx': i, 'rsi': rsi.iloc[i], 'price': highs[i], 'vol': volumes[i]})
 
-    # 해결책 1: RSI 탐색 범위를 40/60으로 넓혀서 신호 포착 민감도를 높였다이다
-    for i in range(max(0, length - 120), length):
-        r = rsi.iloc[i]
-        if r < 40:
-            if not in_low:
-                in_low = True
-                curr_v = {'idx': i, 'rsi': r, 'price': lows[i], 'vol': volumes[i]}
-            elif r < curr_v['rsi']:
-                curr_v = {'idx': i, 'rsi': r, 'price': lows[i], 'vol': volumes[i]}
-        else:
-            if in_low: valleys.append(curr_v); in_low = False
-        
-        if r > 60:
-            if not in_high:
-                in_high = True
-                curr_p = {'idx': i, 'rsi': r, 'price': highs[i], 'vol': volumes[i]}
-            elif r > curr_p['rsi']:
-                curr_p = {'idx': i, 'rsi': r, 'price': highs[i], 'vol': volumes[i]}
-        else:
-            if in_high: peaks.append(curr_p); in_high = False
-
-    msg = ""
+    msg_list = []
     bull_score, bear_score = 0, 0
 
     if len(valleys) >= 2:
         v1, v2 = valleys[-2], valleys[-1]
-        if (v2['idx'] - v1['idx']) < 60:
-            is_conf = v2['vol'] < v1['vol']
-            icon = "⭐" if is_conf else "⚠️"
-            if v2['price'] < v1['price'] and v2['rsi'] > v1['rsi']:
-                msg += f"{icon} 일반 상승\n"
-                bull_score += 2 if is_conf else 1
-            elif v2['price'] > v1['price'] and v2['rsi'] < v1['rsi']:
-                msg += f"{icon} 히든 상승\n"
-                bull_score += 2 if is_conf else 1
+        is_conf = v2['vol'] < v1['vol']
+        if v2['price'] < v1['price'] and v2['rsi'] > v1['rsi']:
+            msg_list.append(f"{'⭐' if is_conf else '⚠️'}일반상승")
+            bull_score += 2 if is_conf else 1
+        elif v2['price'] > v1['price'] and v2['rsi'] < v1['rsi']:
+            msg_list.append(f"{'⭐' if is_conf else '⚠️'}히든상승")
+            bull_score += 2 if is_conf else 1
 
     if len(peaks) >= 2:
         p1, p2 = peaks[-2], peaks[-1]
-        if (p2['idx'] - p1['idx']) < 60:
-            is_conf = p2['vol'] < p1['vol']
-            # 해결책 2: 주봉 RSI가 50 이상이면 하락 신호의 신뢰도를 낮춘다이다
-            if curr_rsi_w > 50:
-                is_conf = False
-            
-            icon = "⭐" if is_conf else "⚠️"
-            if p2['price'] > p1['price'] and p2['rsi'] < p1['rsi']:
-                msg += f"{icon} 일반 하락\n"
-                bear_score += 2 if is_conf else 1
-            elif p2['price'] < p1['price'] and p2['rsi'] > p1['rsi']:
-                msg += f"{icon} 히든 하락\n"
-                bear_score += 2 if is_conf else 1
+        # 주봉 강세 시 하락 신호 가중치 약화이다
+        is_conf = (p2['vol'] < p1['vol']) and (curr_rsi_w < 55)
+        if p2['price'] > p1['price'] and p2['rsi'] < p1['rsi']:
+            msg_list.append(f"{'⭐' if is_conf else '⚠️'}일반하락")
+            bear_score += 2 if is_conf else 1
+        elif p2['price'] < p1['price'] and p2['rsi'] > p1['rsi']:
+            msg_list.append(f"{'⭐' if is_conf else '⚠️'}히든하락")
+            bear_score += 2 if is_conf else 1
 
-    # 최종 판정
     if bull_score > bear_score:
-        verdict = "✅ 상승 우위" if bull_score >= 2 else "🤔 상승 관망"
+        verdict = "✅ 상승우위" if bull_score >= 2 else "🤔 상승관망"
     elif bear_score > bull_score:
-        verdict = "🚨 하락 우위" if bear_score >= 2 else "⚠️ 하락 주의"
+        verdict = "🚨 하락우위" if bear_score >= 2 else "⚠️ 하락주의"
     else:
-        verdict = "⚪ 중립/신호없음"
+        verdict = "⚪ 중립"
 
-    return verdict, msg.strip()
+    return verdict, "/".join(msg_list)
 
 def analyze_ticker(ticker):
     try:
@@ -112,32 +89,21 @@ def analyze_ticker(ticker):
         curr_rsi_w = rsi14w.iloc[-1]
 
         verdict, detail = detect_divergence_final(df_d, rsi9, curr_rsi_w)
-        
-        # 통합 리포트를 위한 한 줄 요약 형식이다
-        line = f"• {ticker} | {cp:.2f}$ | RSI: {curr_rsi9:.1f}/{curr_rsi_w:.1f}\n"
-        line += f"  판정: {verdict} {('[' + detail + ']') if detail else ''}\n"
-        return line
-    except:
-        return None
+        return f"• {ticker:5} | {cp:7.2f}$ | {verdict:7} [{' ' if not detail else detail}]"
+    except: return None
 
 def main():
     tickers = ['QQQ', 'TQQQ', 'SOXL', 'NVDA', 'AAPL', 'TSLA', 'PLTR', 'ORCL', 'AMAT', 'LRCX', 'MSFT', 'META']
     
-    # 해결책 3: 모든 리포트를 하나로 통합한다이다
-    combined_report = "🏛️ [전 종목 통합 분석 리포트 v175]이다\n"
-    combined_report += f"분석 일시: {datetime.now().strftime('%Y-%m-%d %H:%M')}\n"
-    combined_report += "====================\n\n"
+    report = f"🏛️ [통합 분석 리포트 v176]이다\n{datetime.now().strftime('%Y-%m-%d %H:%M')}\n"
+    report += "="*25 + "\n"
     
     for t in tickers:
-        report_line = analyze_ticker(t)
-        if report_line:
-            combined_report += report_line + "\n"
+        line = analyze_ticker(t)
+        if line: report += line + "\n"
     
-    combined_report += "--------------------\n"
-    combined_report += "※ RSI: (일봉9d/주봉14w) 수치이다.\n"
-    combined_report += "※ ⭐확증, ⚠️거짓(주봉 강세 시 하락신호 무시)이다."
-    
-    send_message(combined_report)
+    report += "="*25 + "\n※ ⭐확증, ⚠️주의(주봉 강세 시 하락신호 약화)이다."
+    send_message(report)
 
 if __name__ == "__main__":
     main()
