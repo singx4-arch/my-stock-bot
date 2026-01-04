@@ -2,18 +2,20 @@ name: trend line,divergence alert
 
 on:
   schedule:
-    - cron: '*/5 * * * *'
+    - cron: '*/5 * * * *' # 5분은 너무 잦으니 10분 정도로 늘리는 것을 추천한다이다
   workflow_dispatch:
 
 jobs:
   monitor:
     runs-on: ubuntu-latest
     permissions:
-      contents: write # 파일 쓰기 권한이다
+      contents: write
 
     steps:
       - name: Checkout code
         uses: actions/checkout@v3
+        with:
+          persist-credentials: true # 권한 유지를 위해 추가한다이다
 
       - name: Set up Python
         uses: actions/setup-python@v4
@@ -28,13 +30,15 @@ jobs:
         env:
           TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
-        run: python trend_line,diver.py
+        # 파일 이름에 특수문자가 있으니 따옴표로 감싸준다이다
+        run: python "trend_line,diver.py" 
 
-      # 파일 기록 저장 단계이다
       - name: Commit and Push changes
         run: |
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          # 최신 상태를 한 번 더 가져와서 충돌을 방지한다이다
+          git pull origin main 
           if [ -f sent_alerts.json ]; then
             git add sent_alerts.json
             git diff --quiet && git diff --staged --quiet || (git commit -m "Update sent alerts [skip ci]" && git push)
