@@ -115,10 +115,9 @@ for symbol in tickers:
     except: continue
 
 # 리포트 구성이다
-report = f"🏛️ 재혁 v195 특급 매수 통합 리포트\n"
+report = f"🏛️ 특급 장기 매수 통합 리포트\n"
 report += f"분석 일시: {datetime.now().strftime('%Y-%m-%d %H:%M')}\n"
 report += f"📊 시장 심리 지수: {market_sentiment}\n"
-report += "=" * 25 + "\n\n"
 
 if super_buy_list:
     report += "🔥 [특급 매수: SUPER BUY] 🔥\n"
