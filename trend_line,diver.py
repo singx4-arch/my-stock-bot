@@ -13,10 +13,16 @@ SENT_ALERTS_FILE = 'sent_alerts.json'
 
 def load_sent_alerts():
     if os.path.exists(SENT_ALERTS_FILE):
-        with open(SENT_ALERTS_FILE, 'r') as f:
-            try: return json.load(f)
-            except: return {}
-    return {}
+        try:
+            with open(SENT_ALERTS_FILE, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+                # 날짜가 다르면 기록을 초기화한다이다
+                if data.get('date') != datetime.now().strftime('%Y-%m-%d'):
+                    return {'date': datetime.now().strftime('%Y-%m-%d'), 'alerts': []}
+                return data
+        except:
+            return {'date': datetime.now().strftime('%Y-%m-%d'), 'alerts': []}
+    return {'date': datetime.now().strftime('%Y-%m-%d'), 'alerts': []}
 
 def save_sent_alerts(sent_alerts):
     with open(SENT_ALERTS_FILE, 'w') as f:
