@@ -229,17 +229,3 @@ function addToReport(obj, cat, tick, sig) {
 function getFetchOptions() {
   return { "muteHttpExceptions": true, "headers": { "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36" } };
 }
-
-function getNaverRealtimePrice(symbol) {
-  var url = "https://polling.finance.naver.com/api/realtime/global/stock/" + symbol;
-  try {
-    var response = UrlFetchApp.fetch(url, { "muteHttpExceptions": true });
-    var data = JSON.parse(response.getContentText());
-    if (data && data.datas && data.datas.length > 0) {
-      return parseFloat(data.datas[0].now);
-    }
-  } catch (e) {
-    Logger.log(symbol + " 네이버 가격 조회 실패다이다.");
-  }
-  return null;
-}
