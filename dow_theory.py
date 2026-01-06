@@ -41,7 +41,6 @@ def send_message(text):
         print(f"❌ 에러 발생: {e}")
 
 # [생존 신고] 봇이 작동 시작했음을 알립니다.
-send_message("🔔 [시스템] 봇 재가동! 분석을 시작합니다이다...")
 
 # --- [3. 분석 로직] ---
 def get_structural_pivots(df, lookback=120, filter_size=3, mode='low'):
