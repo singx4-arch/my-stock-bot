@@ -137,7 +137,6 @@ for symbol, name in ticker_map.items():
     except: continue
 
 report = f"🏛️ 마켓 구조 분석 리포트 (v125)\n"
-report += f"분석 일시: {datetime.now().strftime('%Y-%m-%d %H:%M')}\n"
 report += " " * 30 + "\n\n"
 
 order = ['🚀 슈퍼 종목군 (주도주)', '💎 눌림 종목군 (매수기회)', '⚠️ 눌림 주의 (추세둔화)', 
