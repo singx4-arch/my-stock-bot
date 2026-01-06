@@ -2,7 +2,7 @@ name: trend line,divergence alert
 
 on:
   schedule:
-    - cron: '*/5 * * * *' # 5분은 너무 잦으니 10분 정도로 늘리는 것을 추천한다이다
+    - cron: '*/10 * * * *' # 5분은 너무 잦으니 10분 정도로 늘리는 것을 추천한다이다
   workflow_dispatch:
 
 jobs:
