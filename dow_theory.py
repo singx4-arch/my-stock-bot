@@ -62,13 +62,13 @@ def get_structural_pivots(df, lookback=120, filter_size=3, mode='low'):
     return pivots
 
 ticker_map = {
-    'QQQ': '나스닥100', 'TQQQ': '나스닥3배', 'SOXL': '반도체3배', 'SPY': 'S&P500', 'TLT': '미국채20년', 'JEPI': 'JEPI',
+    'QQQ': '나스닥100', 'TQQQ': '나스닥3배', 'SOXL': '반도체3배', 'SPY': 'S&P500', 'JEPI': 'JEPI',
     'NVDA': '엔비디아', 'TSM': 'TSMC', 'AVGO': '브로드컴', 'ASML': 'ASML', 'AMD': 'AMD', 'MU': '마이크론', 
-    'GLW': '코닝', 'LRCX': '램리서치', 'AMAT': '어플라이드', 'QCOM': '퀄컴', 'INTC': '인텔', 'ARM': 'ARM', 'TXN': '텍사스',
-    'MSFT': '마이크로소프트', 'GOOGL': '알파벳', 'AMZN': '아마존', 'META': '메타', 'AAPL': '애플', 'NFLX': '넷플릭스', 'TSLA': '테슬라',
-    'PLTR': '팔란티어', 'ORCL': '오라클', 'SMCI': '슈퍼마이크로', 'DELL': '델', 'ANET': '아리스타', 'HPE': 'HPE',
-    'ADBE': '어도비', 'CRM': '세일즈포스', 'NOW': '서비스나우', 'CRWD': '크라우드', 'PANW': '팔로알토', 'APP': '앱러빈',
-    'IONQ': '아이온큐', 'MSTR': 'MSTR', 'COIN': '코인베이스', 'HOOD': '로빈후드', 'RIVN': '리비안', 'OKLO': '오클로',
+    'GLW': '코닝', 'LRCX': '램리서치', 'AMAT': '어플라이드', 'QCOM': '퀄컴', 'INTC': '인텔', 'ARM': 'ARM', 
+    'MSFT': '마이크로소프트', 'GOOGL': '알파벳', 'AMZN': '아마존', 'META': '메타', 'AAPL': '애플', 'TSLA': '테슬라',
+    'PLTR': '팔란티어', 'ORCL': '오라클', 'SMCI': '슈퍼마이크로', 'DELL': '델', 'ANET': '아리스타', 
+    'NOW': '서비스나우', 'CRWD': '크라우드', 'PANW': '팔로알토', 'APP': '앱러빈',
+    'IONQ': '아이온큐', 'MSTR': 'MSTR', 'COIN': '코인베이스', 'HOOD': '로빈후드', 
     'XOM': '엑슨모빌', 'CVX': '셰브론', 'OXY': '옥시덴탈', 'SHEL': '쉘', 'COP': '코노코필립스',
     'VST': '비스트라', 'CEG': '컨스텔레이션', 'TLN': '탈렌에너지', 'CCJ': '카메코', 'GEV': 'GE버노바', 'ENPH': '엔페이즈', 'NEE': '넥스트에라',
     'LLY': '일라이릴리', 'NVO': '노보노디스크'
