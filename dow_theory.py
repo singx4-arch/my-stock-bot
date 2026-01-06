@@ -6,29 +6,32 @@ import numpy as np
 from datetime import datetime
 
 # --- [설정 구간] ---
-# 1. 토큰: 아까 새로 만든 봇 토큰이 맞는지 확인하라이다
 token = '8160201188:AAELStlMFcTeqpFZYuF-dsvnXWppN7iOHiI' 
-
-# 2. 채팅방 ID: 아까 GAS 코드에 있던 그 ID를 넣었다이다 (-100으로 시작하는 숫자)
 chat_id = '-1004998189045' 
 
+# [수정됨] POST 방식으로 변경하여 긴 메시지도 전송 가능하게 함
 def send_message(text):
     if not token or not chat_id:
-        print("❌ 오류: 토큰이나 채팅방 ID가 없다이다.")
+        print("❌ 오류: 토큰/채팅ID 누락")
         return
 
-    print(f"🚀 텔레그램 전송 시작... (길이: {len(text)})")
+    print(f"🚀 전송 시도: {text[:20]}... (길이: {len(text)})")
     url = f"https://api.telegram.org/bot{token}/sendMessage"
-    params = {'chat_id': chat_id, 'text': text}
+    
+    # data 파라미터로 보내면 길이 제한 걱정이 덜하다이다
+    data = {'chat_id': chat_id, 'text': text}
     
     try:
-        resp = requests.get(url, params=params)
+        resp = requests.post(url, data=data) # GET -> POST 변경
         if resp.status_code == 200:
-            print("✅ 전송 성공이다!")
+            print("✅ 전송 성공!")
         else:
             print(f"❌ 전송 실패: {resp.status_code} / {resp.text}")
     except Exception as e:
         print(f"❌ 에러 발생: {e}")
+
+# --- [1. 생존 신고] 일단 이거부터 보내서 봇이 살아있는지 확인한다이다 ---
+send_message("🔔 [시스템] 주식 분석 봇이 가동을 시작했다이다!\n잠시만 기다리면 리포트가 온다이다.")
 
 def get_structural_pivots(df, lookback=120, filter_size=3, mode='low'):
     pivots = []
@@ -83,13 +86,11 @@ print("데이터 분석 시작... (시간이 좀 걸린다이다)")
 
 for symbol, name in ticker_map.items():
     try:
-        # 진행상황 확인용 출력
         print(f"..{symbol}", end=" ", flush=True)
         
         df = yf.download(symbol, period='1y', interval='1d', progress=False)
         if len(df) < 120: continue
         
-        # yfinance 업데이트로 인한 멀티인덱스 처리
         if isinstance(df.columns, pd.MultiIndex): 
             df.columns = df.columns.get_level_values(0)
 
@@ -155,5 +156,5 @@ for key in order:
 report += "-" * 30 + "\n"
 report += "분석 종료이다."
 
-# 메시지 전송
+# 결과 전송
 send_message(report)
