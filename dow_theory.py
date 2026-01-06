@@ -66,7 +66,7 @@ ticker_map = {
     'NVDA': '엔비디아', 'TSM': 'TSMC', 'AVGO': '브로드컴', 'ASML': 'ASML', 'AMD': 'AMD', 'MU': '마이크론', 
     'GLW': '코닝', 'LRCX': '램리서치', 'AMAT': '어플라이드', 'QCOM': '퀄컴', 'INTC': '인텔', 'ARM': 'ARM', 
     'MSFT': '마이크로소프트', 'GOOGL': '알파벳', 'AMZN': '아마존', 'META': '메타', 'AAPL': '애플', 'TSLA': '테슬라',
-    'PLTR': '팔란티어', 'ORCL': '오라클', 'SMCI': '슈퍼마이크로', 'DELL': '델', 'ANET': '아리스타', 
+    'PLTR': '팔란티어', 'ORCL': '오라클', 'DELL': '델', 'ANET': '아리스타', 
     'NOW': '서비스나우', 'CRWD': '크라우드', 'PANW': '팔로알토', 'APP': '앱러빈',
     'IONQ': '아이온큐', 'MSTR': 'MSTR', 'COIN': '코인베이스', 'HOOD': '로빈후드', 
     'XOM': '엑슨모빌', 'CVX': '셰브론', 'OXY': '옥시덴탈', 'SHEL': '쉘', 'COP': '코노코필립스',
