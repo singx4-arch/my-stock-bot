@@ -6,7 +6,7 @@ import numpy as np
 from datetime import datetime
 
 # 텔레그램 설정이다
-token = os.getenv('TELEGRAM_TOKEN') or '7971022798:AAFGQR1zxdCq1urZKgdRzjjsvr3Lt6T9y1I'
+token = os.getenv('TELEGRAM_TOKEN') or '8160201188:AAELStlMFcTeqpFZYuF-dsvnXWppN7iOHiI'
 chat_id = os.getenv('TELEGRAM_CHAT_ID')
 
 def send_message(text):
