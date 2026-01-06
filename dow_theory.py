@@ -5,34 +5,45 @@ import os
 import numpy as np
 from datetime import datetime
 
-# --- [설정 구간] ---
+# --- [1. 설정 구간] ---
+# 사용자님이 알려주신 새 봇 정보로 고정했습니다.
 token = '8160201188:AAELStlMFcTeqpFZYuF-dsvnXWppN7iOHiI' 
 chat_id = '-1004998189045' 
 
-# [수정됨] POST 방식으로 변경하여 긴 메시지도 전송 가능하게 함
+# --- [2. 메시지 전송 함수 (핵심 수정됨)] ---
 def send_message(text):
     if not token or not chat_id:
-        print("❌ 오류: 토큰/채팅ID 누락")
+        print("❌ 오류: 토큰이나 채팅방 ID가 없습니다.")
         return
 
-    print(f"🚀 전송 시도: {text[:20]}... (길이: {len(text)})")
+    # 텔레그램은 한 번에 4096자까지만 보낼 수 있어서 안전하게 자르는 기능 추가
+    if len(text) > 4000:
+        print(f"⚠️ 메시지가 너무 길어({len(text)}자) 나눠서 보냅니다.")
+        for i in range(0, len(text), 4000):
+            send_message(text[i:i+4000])
+        return
+
+    print(f"🚀 전송 시도... (길이: {len(text)})")
     url = f"https://api.telegram.org/bot{token}/sendMessage"
     
-    # data 파라미터로 보내면 길이 제한 걱정이 덜하다이다
+    # ★ 핵심: data 파라미터를 사용해 POST 방식으로 보냅니다. (긴 글 전송 가능)
     data = {'chat_id': chat_id, 'text': text}
     
     try:
-        resp = requests.post(url, data=data) # GET -> POST 변경
+        resp = requests.post(url, data=data) 
+        
         if resp.status_code == 200:
             print("✅ 전송 성공!")
         else:
-            print(f"❌ 전송 실패: {resp.status_code} / {resp.text}")
+            print(f"❌ 전송 실패: {resp.status_code}")
+            print(f"이유: {resp.text}") 
     except Exception as e:
         print(f"❌ 에러 발생: {e}")
 
-# --- [1. 생존 신고] 일단 이거부터 보내서 봇이 살아있는지 확인한다이다 ---
-send_message("🔔 [시스템] 주식 분석 봇이 가동을 시작했다이다!\n잠시만 기다리면 리포트가 온다이다.")
+# [생존 신고] 봇이 작동 시작했음을 알립니다.
+send_message("🔔 [시스템] 봇 재가동! 분석을 시작합니다이다...")
 
+# --- [3. 분석 로직] ---
 def get_structural_pivots(df, lookback=120, filter_size=3, mode='low'):
     pivots = []
     prices = df['Low'] if mode == 'low' else df['High']
@@ -156,5 +167,5 @@ for key in order:
 report += "-" * 30 + "\n"
 report += "분석 종료이다."
 
-# 결과 전송
+# --- [4. 최종 전송] ---
 send_message(report)
