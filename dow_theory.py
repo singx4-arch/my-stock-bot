@@ -5,15 +5,30 @@ import os
 import numpy as np
 from datetime import datetime
 
-# 텔레그램 설정이다
-token = os.getenv('TELEGRAM_TOKEN') or '8160201188:AAELStlMFcTeqpFZYuF-dsvnXWppN7iOHiI'
-chat_id = os.getenv('TELEGRAM_CHAT_ID')
+# --- [설정 구간] ---
+# 1. 토큰: 아까 새로 만든 봇 토큰이 맞는지 확인하라이다
+token = '8160201188:AAELStlMFcTeqpFZYuF-dsvnXWppN7iOHiI' 
+
+# 2. 채팅방 ID: 아까 GAS 코드에 있던 그 ID를 넣었다이다 (-100으로 시작하는 숫자)
+chat_id = '-1004998189045' 
 
 def send_message(text):
-    if not token or not chat_id: return
+    if not token or not chat_id:
+        print("❌ 오류: 토큰이나 채팅방 ID가 없다이다.")
+        return
+
+    print(f"🚀 텔레그램 전송 시작... (길이: {len(text)})")
     url = f"https://api.telegram.org/bot{token}/sendMessage"
     params = {'chat_id': chat_id, 'text': text}
-    requests.get(url, params=params)
+    
+    try:
+        resp = requests.get(url, params=params)
+        if resp.status_code == 200:
+            print("✅ 전송 성공이다!")
+        else:
+            print(f"❌ 전송 실패: {resp.status_code} / {resp.text}")
+    except Exception as e:
+        print(f"❌ 에러 발생: {e}")
 
 def get_structural_pivots(df, lookback=120, filter_size=3, mode='low'):
     pivots = []
@@ -34,40 +49,15 @@ def get_structural_pivots(df, lookback=120, filter_size=3, mode='low'):
     return pivots
 
 ticker_map = {
-    # --- [지수/ETF] ---
-    'QQQ': '나스닥100', 'TQQQ': '나스닥3배', 'SOXL': '반도체3배',
-    'SPY': 'S&P500', 'TLT': '미국채20년', 'JEPI': 'JEPI',
-    
-    # --- [반도체 핵심] ---
-    'NVDA': '엔비디아', 'TSM': 'TSMC', 'AVGO': '브로드컴', 'ASML': 'ASML', 
-    'AMD': 'AMD', 'MU': '마이크론', 'GLW': '코닝', 'LRCX': '램리서치', 'AMAT': '어플라이드',
-    'QCOM': '퀄컴', 'INTC': '인텔', 'ARM': 'ARM', 'TXN': '텍사스인스트루먼트',
-    
-    # --- [빅테크/플랫폼] ---
-    'MSFT': '마이크로소프트', 'GOOGL': '알파벳', 'AMZN': '아마존', 'META': '메타', 
-    'AAPL': '애플', 'NFLX': '넷플릭스', 'TSLA': '테슬라',
-    
-    # --- [AI 하드웨어/서버/네트워크] ---
-    'PLTR': '팔란티어', 'ORCL': '오라클',
-    'SMCI': '슈퍼마이크로', 'DELL': '델', 'ANET': '아리스타', 'HPE': 'HPE',
-    
-    # --- [소프트웨어/보안] ---
-    'ADBE': '어도비', 'CRM': '세일즈포스', 'NOW': '서비스나우',
-    'CRWD': '크라우드스트라이크', 'PANW': '팔로알토', 'APP': '앱러빈',
-    
-    # --- [미래기술/크립토/고변동성] ---
-    'IONQ': '아이온큐', 'MSTR': 'MSTR', 'COIN': '코인베이스',
-    'HOOD': '로빈후드', 'RIVN': '리비안', 'OKLO': '오클로',
-    
-    # --- [에너지 (전통 오일/가스) ★추가됨] ---
-    'XOM': '엑슨모빌', 'CVX': '셰브론', 
-    'OXY': '옥시덴탈', 'SHEL': '쉘', 'COP': '코노코필립스',
-    
-    # --- [에너지 (AI 전력/원전/유틸리티)] ---
-    'VST': '비스트라', 'CEG': '컨스텔레이션', 'TLN': '탈렌에너지',
-    'CCJ': '카메코', 'GEV': 'GE버노바', 'ENPH': '엔페이즈', 'NEE': '넥스트에라',
-
-    # --- [바이오/헬스케어 (시총상위) ★추가됨] ---
+    'QQQ': '나스닥100', 'TQQQ': '나스닥3배', 'SOXL': '반도체3배', 'SPY': 'S&P500', 'TLT': '미국채20년', 'JEPI': 'JEPI',
+    'NVDA': '엔비디아', 'TSM': 'TSMC', 'AVGO': '브로드컴', 'ASML': 'ASML', 'AMD': 'AMD', 'MU': '마이크론', 
+    'GLW': '코닝', 'LRCX': '램리서치', 'AMAT': '어플라이드', 'QCOM': '퀄컴', 'INTC': '인텔', 'ARM': 'ARM', 'TXN': '텍사스',
+    'MSFT': '마이크로소프트', 'GOOGL': '알파벳', 'AMZN': '아마존', 'META': '메타', 'AAPL': '애플', 'NFLX': '넷플릭스', 'TSLA': '테슬라',
+    'PLTR': '팔란티어', 'ORCL': '오라클', 'SMCI': '슈퍼마이크로', 'DELL': '델', 'ANET': '아리스타', 'HPE': 'HPE',
+    'ADBE': '어도비', 'CRM': '세일즈포스', 'NOW': '서비스나우', 'CRWD': '크라우드', 'PANW': '팔로알토', 'APP': '앱러빈',
+    'IONQ': '아이온큐', 'MSTR': 'MSTR', 'COIN': '코인베이스', 'HOOD': '로빈후드', 'RIVN': '리비안', 'OKLO': '오클로',
+    'XOM': '엑슨모빌', 'CVX': '셰브론', 'OXY': '옥시덴탈', 'SHEL': '쉘', 'COP': '코노코필립스',
+    'VST': '비스트라', 'CEG': '컨스텔레이션', 'TLN': '탈렌에너지', 'CCJ': '카메코', 'GEV': 'GE버노바', 'ENPH': '엔페이즈', 'NEE': '넥스트에라',
     'LLY': '일라이릴리', 'NVO': '노보노디스크'
 }
 
@@ -80,7 +70,6 @@ groups = {
     '🚨 위험 종목 (지지이탈)': []
 }
 
-# 그룹별 헤더 라벨 정의다
 group_status_labels = {
     '🚀 슈퍼 종목군 (주도주)': '[상승] 🔥',
     '💎 눌림 종목군 (매수기회)': '[상승] 🔥',
@@ -90,11 +79,19 @@ group_status_labels = {
     '🚨 위험 종목 (지지이탈)': '[주의]'
 }
 
+print("데이터 분석 시작... (시간이 좀 걸린다이다)")
+
 for symbol, name in ticker_map.items():
     try:
+        # 진행상황 확인용 출력
+        print(f"..{symbol}", end=" ", flush=True)
+        
         df = yf.download(symbol, period='1y', interval='1d', progress=False)
         if len(df) < 120: continue
-        if isinstance(df.columns, pd.MultiIndex): df.columns = df.columns.get_level_values(0)
+        
+        # yfinance 업데이트로 인한 멀티인덱스 처리
+        if isinstance(df.columns, pd.MultiIndex): 
+            df.columns = df.columns.get_level_values(0)
 
         curr_p = float(df['Close'].iloc[-1])
         df['SMMA7'] = df['Close'].ewm(alpha=1/7, adjust=False).mean()
@@ -116,7 +113,6 @@ for symbol, name in ticker_map.items():
         is_breakout = curr_p > high_pivots[0]['val']
         is_hl = low_pivots[0]['val'] > low_pivots[1]['val']
         
-        # 종목 정보에서 라벨을 제거하고 깔끔하게 이름과 수치만 남겼다이다
         info = f"{name}({symbol})  (+{dist_to_sup:.1f}%)"
 
         if curr_p < support:
@@ -134,9 +130,13 @@ for symbol, name in ticker_map.items():
             else:
                 groups['📉 박스권 (추세둔화)'].append(info)
 
-    except: continue
+    except Exception as e:
+        print(f"Error {symbol}: {e}")
+        continue
 
-report = f"🏛️ 마켓 구조 분석 리포트 (v125)\n"
+print("\n분석 완료! 리포트 작성 중...")
+
+report = f"🏛️ 마켓 구조 분석 리포트 (Python v1.0)\n"
 report += "(? %)는 추세 전환 전까지의 높이를 말합니다. "  + "\n\n"
 
 order = ['🚀 슈퍼 종목군 (주도주)', '💎 눌림 종목군 (매수기회)', '⚠️ 눌림 주의 (추세둔화)', 
@@ -145,7 +145,6 @@ order = ['🚀 슈퍼 종목군 (주도주)', '💎 눌림 종목군 (매수기�
 for key in order:
     stocks = groups[key]
     status = group_status_labels[key]
-    # 헤더 부분에만 상태 라벨을 붙인다이다
     report += f"■ {key} {status}\n"
     if stocks:
         report += "\n".join([f"  - {s}" for s in stocks])
@@ -156,4 +155,5 @@ for key in order:
 report += "-" * 30 + "\n"
 report += "분석 종료이다."
 
+# 메시지 전송
 send_message(report)
