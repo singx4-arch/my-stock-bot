@@ -8,7 +8,7 @@ from datetime import datetime
 from bs4 import BeautifulSoup
 
 # 1. 환경 설정 및 세션 관리이다
-token = os.getenv('TELEGRAM_TOKEN') or '7971022798:AAFGQR1zxdCq1urZKgdRzjjsvr3Lt6T9y1I'
+token = os.getenv('TELEGRAM_TOKEN') or '8160201188:AAELStlMFcTeqpFZYuF-dsvnXWppN7iOHiI'
 chat_id = os.getenv('TELEGRAM_CHAT_ID')
 SENT_ALERTS_FILE = 'sent_alerts.json'
 
