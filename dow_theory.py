@@ -8,7 +8,7 @@ from datetime import datetime
 # --- [1. 설정 구간] ---
 # 사용자님이 알려주신 새 봇 정보로 고정했습니다.
 token = '8160201188:AAELStlMFcTeqpFZYuF-dsvnXWppN7iOHiI' 
-chat_id = '-1004998189045' 
+chat_id = '-4998189045' 
 
 # --- [2. 메시지 전송 함수 (핵심 수정됨)] ---
 def send_message(text):
