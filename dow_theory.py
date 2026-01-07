@@ -86,8 +86,6 @@ group_status_labels = {
     '🚨 위험 종목 (지지이탈)': '[주의]'
 }
 
-print("데이터 분석 시작... (시간이 좀 걸린다이다)")
-
 for symbol, name in ticker_map.items():
     try:
         print(f"..{symbol}", end=" ", flush=True)
