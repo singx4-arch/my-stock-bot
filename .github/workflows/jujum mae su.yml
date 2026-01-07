@@ -1,13 +1,10 @@
-name: 저점 매수 및 폭발 감지 봇
+name: Weekly Stock Report
 
 on:
   schedule:
-    - cron: '0 * * * *'  # 매시간 정각 실행이다
-  workflow_dispatch:      # 수동 실행이다
-
-# 봇에게 쓰기 권한을 명시적으로 부여한다이다
-permissions:
-  contents: write
+    # 매주 월요일 00:00 UTC (한국 시간 오전 9시)에 실행한다이다
+    - cron: '0 0 * * 1'
+  workflow_dispatch: # 필요할 때 수동으로도 실행할 수 있게 한다이다
 
 jobs:
   build:
@@ -19,23 +16,14 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v4
         with:
-          python-version: '3.10'
+          python-version: '3.9'
 
       - name: Install dependencies
-        # 시장 전체 분석을 위한 라이브러리들도 모두 포함했다이다
-        run: pip install yfinance pandas requests numpy beautifulsoup4 lxml html5lib
+        run: |
+          pip install yfinance pandas requests beautifulsoup4 lxml numpy
 
       - name: Run script
         env:
           TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
-        run: python jujum_maesu.py
-
-      - name: Commit and Push changes
-        run: |
-          git config --global user.name "github-actions[bot]"
-          git config --global user.email "github-actions[bot]@users.noreply.github.com"
-          git add sent_alerts.json
-          git commit -m "Update sent alerts [skip ci]" || exit 0
-          git pull origin main --rebase
-          git push
+        run: python your_script_name.py # 실제 파이썬 파일 이름으로 수정바란다이다
