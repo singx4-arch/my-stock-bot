@@ -13,7 +13,7 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v3
 
-      - name: jujum_maesu.py
+      - name: Set up Python 
         uses: actions/setup-python@v4
         with:
           python-version: '3.9'
@@ -26,4 +26,4 @@ jobs:
         env:
           TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
-        run: python your_script_name.py # 실제 파이썬 파일 이름으로 수정바란다이다
+        run: python jujum_maesu.py # 실제 파이썬 파일 이름으로 수정바란다이다
