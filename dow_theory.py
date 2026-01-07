@@ -62,9 +62,9 @@ def get_structural_pivots(df, lookback=120, filter_size=3, mode='low'):
     return pivots
 
 ticker_map = {
-    'QQQ': '나스닥100', 'TQQQ': '나스닥3배', 'SOXL': '반도체3배', 'SPY': 'S&P500', 'JEPI': 'JEPI',
+    'QQQ': '나스닥100', 'TQQQ': '나스닥3배', 'SOXL': '반도체3배', 'SPY': 'S&P500',
     'NVDA': '엔비디아', 'TSM': 'TSMC', 'AVGO': '브로드컴', 'ASML': 'ASML', 'AMD': 'AMD', 'MU': '마이크론', 
-    'GLW': '코닝', 'LRCX': '램리서치', 'AMAT': '어플라이드', 'QCOM': '퀄컴', 'INTC': '인텔', 'ARM': 'ARM', 
+    'GLW': '코닝', 'LRCX': '램리서치', 'AMAT': '어플라이드', 'QCOM': '퀄컴' 'ARM': 'ARM', 
     'MSFT': '마이크로소프트', 'GOOGL': '알파벳', 'AMZN': '아마존', 'META': '메타', 'AAPL': '애플', 'TSLA': '테슬라',
     'PLTR': '팔란티어', 'ORCL': '오라클', 'DELL': '델', 'ANET': '아리스타', 
     'CRWD': '크라우드',
