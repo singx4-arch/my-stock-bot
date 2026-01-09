@@ -67,44 +67,44 @@ ticker_map = {
 }
 
 groups = {
-    '🚀 전고점 돌파 + 골든크로스': [],
-    '💎 눌림 종목군 (매수기회)': [],
+    '🚀 슈퍼 종목군 (거래량 돌파)': [],
+    '💎 눌림 종목군 (건전한 조정)': [],
     '⏳ 눌림 보류 (몸통 이탈)': [],
-    '⚠️ 눌림 주의 (추세둔화)': [],
+    '⚠️ 눌림 주의 (거래량 동반 하락)': [],
     '📦 박스권 (상승유지)': [],
     '📉 박스권 (추세둔화)': [],
     '🚨 위험 종목 (지지이탈)': []
 }
 
 group_status_labels = {
-    '🚀 전고점 돌파 + 골든크로스': '[상승] 🔥',
-    '💎 눌림 종목군 (매수기회)': '[상승] 🔥',
-    '⏳ 눌림 보류 (몸통 이탈)': '[주의]',
-    '⚠️ 눌림 주의 (추세둔화)': '[주의]',
-    '📦 박스권 (상승유지)': '[상승]',
-    '📉 박스권 (추세둔화)': '[주의]',
-    '🚨 위험 종목 (지지이탈)': '[주의]'
+    '🚀 슈퍼 종목군 (거래량 돌파)': '[강력상승] 🔥',
+    '💎 눌림 종목군 (건전한 조정)': '[매수기회] ✅',
+    '⏳ 눌림 보류 (몸통 이탈)': '[관망] ⏳',
+    '⚠️ 눌림 주의 (거래량 동반 하락)': '[위험] ⚠️',
+    '🚨 위험 종목 (지지이탈)': '[손절주의] 🚨'
 }
 
 for symbol, name in ticker_map.items():
     try:
         print(f"..{symbol}", end=" ", flush=True)
-        
-        # prepost=True로 프리마켓 시세를 포함한다이다
         ticker_obj = yf.Ticker(symbol)
         df = ticker_obj.history(period='1y', interval='1d', prepost=True)
-        
         if len(df) < 120: continue
         
         curr_p = float(df['Close'].iloc[-1])
         curr_open = float(df['Open'].iloc[-1])
         
+        # 지표 계산이다
         df['SMMA7'] = df['Close'].ewm(alpha=1/7, adjust=False).mean()
         df['MA20'] = df['Close'].rolling(window=20).mean()
+        df['VolMA20'] = df['Volume'].rolling(window=20).mean() # 20일 평균 거래량이다
         
         curr_smma7 = float(df['SMMA7'].iloc[-1])
         curr_ma20 = float(df['MA20'].iloc[-1])
+        curr_vol = float(df['Volume'].iloc[-1])
+        avg_vol = float(df['VolMA20'].iloc[-2]) # 전일까지의 평균 거래량이다
         
+        vol_ratio = curr_vol / avg_vol # 거래량 비율이다
         gap_ratio = (curr_smma7 - curr_ma20) / curr_ma20
         is_golden = (curr_smma7 > curr_ma20) and (gap_ratio > 0.0015)
         is_dead = (curr_smma7 < curr_ma20) or (0 <= gap_ratio <= 0.0015)
@@ -118,21 +118,33 @@ for symbol, name in ticker_map.items():
         is_breakout = curr_p > high_pivots[0]['val']
         is_hl = low_pivots[0]['val'] > low_pivots[1]['val']
         
-        info = f"{name}({symbol})  (+{dist_to_sup:.1f}%)"
+        info = f"{name}({symbol}) (+{dist_to_sup:.1f}%, Vol:{vol_ratio:.1f}x)"
 
         if curr_p < support:
             groups['🚨 위험 종목 (지지이탈)'].append(info)
         elif is_hl:
             if is_dead:
-                groups['⚠️ 눌림 주의 (추세둔화)'].append(info)
+                # 눌림목 구조이나 데드크로스 혹은 거래량이 터지며 하락 시 주의한다이다
+                if vol_ratio > 1.2:
+                    groups['⚠️ 눌림 주의 (거래량 동반 하락)'].append(info)
+                else:
+                    groups['📉 박스권 (추세둔화)'].append(info)
             else:
                 body_bottom = min(curr_open, curr_p)
                 if body_bottom >= curr_ma20:
-                    groups['💎 눌림 종목군 (매수기회)'].append(info)
+                    # 거래량이 줄어들며 20일선 위에서 지지받는 것이 진짜 눌림목이다
+                    if vol_ratio < 1.0:
+                        groups['💎 눌림 종목군 (건전한 조정)'].append(info)
+                    else:
+                        groups['⏳ 눌림 보류 (몸통 이탈)'].append(info)
                 else:
                     groups['⏳ 눌림 보류 (몸통 이탈)'].append(info)
         elif is_breakout and is_golden:
-            groups['🚀 슈퍼 종목군 (주도주)'].append(info)
+            # 돌파 시 거래량이 평소보다 10% 이상은 더 터져야 신뢰한다이다
+            if vol_ratio > 1.1:
+                groups['🚀 슈퍼 종목군 (거래량 돌파)'].append(info)
+            else:
+                groups['📦 박스권 (상승유지)'].append(info)
         else:
             if is_golden:
                 groups['📦 박스권 (상승유지)'].append(info)
@@ -145,12 +157,11 @@ for symbol, name in ticker_map.items():
 
 print("\n분석 완료! 리포트 작성 중이다.")
 
-report = f"🏛️ 마켓 구조 분석 리포트 (프리마켓 통합)\n"
-report += "(? %)는 지지선 대비 현재 가격의 높이이다. "  + "\n\n"
+report = f"🏛️ 마켓 구조 분석 리포트 (v1.6 - 거래량 필터 통합)\n"
+report += "Vol: x는 20일 평균 거래량 대비 현재 비율이다. "  + "\n\n"
 
-# [수정] 리포트 출력 순서에서 박스권 항목들을 제외했다이다
-order = ['🚀 전고점 돌파 + 골든크로스', '💎 눌림 종목군 (매수기회)', '⏳ 눌림 보류 (몸통 이탈)', 
-         '⚠️ 눌림 주의 (추세둔화)', '🚨 위험 종목 (지지이탈)']
+order = ['🚀 슈퍼 종목군 (거래량 돌파)', '💎 눌림 종목군 (건전한 조정)', '⏳ 눌림 보류 (몸통 이탈)', 
+         '⚠️ 눌림 주의 (거래량 동반 하락)', '🚨 위험 종목 (지지이탈)']
 
 for key in order:
     stocks = groups[key]
