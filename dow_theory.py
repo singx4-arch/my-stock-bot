@@ -90,14 +90,12 @@ for symbol, name in ticker_map.items():
     try:
         print(f"..{symbol}", end=" ", flush=True)
         
-        # [수정] prepost=True를 추가하여 프리마켓과 애프터마켓 데이터를 포함한다이다
+        # prepost=True로 프리마켓 시세를 포함한다이다
         ticker_obj = yf.Ticker(symbol)
         df = ticker_obj.history(period='1y', interval='1d', prepost=True)
         
         if len(df) < 120: continue
         
-        # 현재가(Close)와 시가(Open)를 가져온다이다
-        # history(interval='1d')에 prepost=True를 쓰면 마지막 행에 프리마켓 시세가 반영된다이다
         curr_p = float(df['Close'].iloc[-1])
         curr_open = float(df['Open'].iloc[-1])
         
@@ -145,13 +143,14 @@ for symbol, name in ticker_map.items():
         print(f"Error {symbol}: {e}")
         continue
 
-print("\n분석 완료! 리포트 작성 중...")
+print("\n분석 완료! 리포트 작성 중이다.")
 
 report = f"🏛️ 마켓 구조 분석 리포트 (프리마켓 통합)\n"
 report += "(? %)는 지지선 대비 현재 가격의 높이이다. "  + "\n\n"
 
+# [수정] 리포트 출력 순서에서 박스권 항목들을 제외했다이다
 order = ['🚀 슈퍼 종목군 (주도주)', '💎 눌림 종목군 (매수기회)', '⏳ 눌림 보류 (몸통 이탈)', 
-         '⚠️ 눌림 주의 (추세둔화)', '📦 박스권 (상승유지)', '📉 박스권 (추세둔화)', '🚨 위험 종목 (지지이탈)']
+         '⚠️ 눌림 주의 (추세둔화)', '🚨 위험 종목 (지지이탈)']
 
 for key in order:
     stocks = groups[key]
@@ -160,7 +159,7 @@ for key in order:
     if stocks:
         report += "\n".join([f"  - {s}" for s in stocks])
     else:
-        report += "  - 해당 종목 없음"
+        report += "  - 해당 종목 없음이다"
     report += "\n\n"
 
 report += "-" * 30 + "\n"
