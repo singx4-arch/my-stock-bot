@@ -66,7 +66,6 @@ def get_structural_pivots(df, lookback=120, filter_size=3, mode='low'):
 
 # --- [3. 메인 분석 로직] ---
 
-# 전문가 기준: 최근 20일(1개월) 누적 수익률 비교이다
 qqq_data = yf.Ticker("QQQ").history(period='30d', interval='1d', prepost=True)
 qqq_20d_perf = (qqq_data['Close'].iloc[-1] - qqq_data['Close'].iloc[-21]) / qqq_data['Close'].iloc[-21]
 
@@ -93,7 +92,6 @@ groups = {
 
 for symbol, name in ticker_map.items():
     try:
-        print(f"..{symbol}", end=" ", flush=True)
         ticker_obj = yf.Ticker(symbol)
         df = ticker_obj.history(period='1y', interval='1d', prepost=True)
         if len(df) < 120: continue
@@ -102,16 +100,13 @@ for symbol, name in ticker_map.items():
         curr_open = float(df['Open'].iloc[-1])
         curr_vol = float(df['Volume'].iloc[-1])
         
-        # 20일 누적 수익률 계산이다
         stock_20d_perf = (df['Close'].iloc[-1] - df['Close'].iloc[-21]) / df['Close'].iloc[-21]
         
-        # 기술 지표 계산이다
         df['SMMA7'] = df['Close'].ewm(alpha=1/7, adjust=False).mean()
         df['MA20'] = df['Close'].rolling(window=20).mean()
         df['VolMA20'] = df['Volume'].rolling(window=20).mean()
         df['RSI'] = calculate_rsi(df['Close'])
         
-        # 볼린저 밴드 스퀴즈 계산이다
         std = df['Close'].rolling(window=20).std()
         df['BB_Width'] = (std * 4) / df['MA20']
         is_squeeze = df['BB_Width'].iloc[-1] < df['BB_Width'].rolling(window=120).min().iloc[-2] * 1.1
@@ -128,13 +123,14 @@ for symbol, name in ticker_map.items():
         is_breakout = curr_p > high_pivots[0]['val']
         is_hl = low_pivots[0]['val'] > (low_pivots[1]['val'] if len(low_pivots) > 1 else 0)
 
-        # 이모지 태그 생성이다
+        # [수정] 정말 압도적인 강세 종목(지수보다 5% 이상 우위)에만 근육 이모지를 붙인다이다
         tags = ""
-        if stock_20d_perf > qqq_20d_perf: tags += "💪"
+        if (stock_20d_perf - qqq_20d_perf) > 0.05: tags += "💪"
         if is_squeeze: tags += "⏳"
         
-        chart_link = f"[차트](https://finviz.com/chart.ashx?t={symbol})"
-        info = f"{name}({symbol}) {chart_link} (+{((curr_p-support)/support)*100:.1f}%)"
+        # [수정] 티커에 직접 링크를 걸어 '차트' 글자를 삭제했다이다
+        ticker_link = f"[{symbol}](https://finviz.com/chart.ashx?t={symbol})"
+        info = f"{name}({ticker_link}) +{((curr_p-support)/support)*100:.1f}%"
 
         if curr_p < support:
             danger_tag = "💀" if vol_ratio > 1.3 else ""
@@ -158,12 +154,10 @@ for symbol, name in ticker_map.items():
             groups['🚀 골크 + 전고 돌파'].append(f"{info} {tags}{conf_tag}{rsi_tag}")
 
     except Exception as e:
-        print(f"Error {symbol}: {e}")
+        pass
 
-print("\n분석 완료! 리포트 작성 중이다.")
-
-report = "🏛️ 마켓 구조 분석 리포트 (v3.2 전문가용 상대 강도)이다\n"
-report += "💪지수보다강함(20일) | ⏳에너지응축 | ⚠️과매수주의 | ⭐신뢰도 | 💀아주위험이다\n\n"
+report = "🏛️ 마켓 구조 분석 리포트 (v3.3 클린 버전)이다\n"
+report += "💪초강세 | ⏳변동성응축 | ⚠️과매수 | ⭐거래량우수 | 💀패닉셀이다\n\n"
 
 order = ['🚀 골크 + 전고 돌파', '💎 눌림 종목군 (매수기회)', '⏳ 눌림 보류 (몸통 이탈)', 
          '⚠️ 눌림 주의 (추세둔화)', '🚨 위험 종목 (지지이탈)']
@@ -177,5 +171,5 @@ for key in order:
         report += "  - 해당 종목 없음이다"
     report += "\n\n"
 
-report += "-" * 30 + "\n분석 종료이다."
+report += "-" * 20 + "\n분석 종료이다."
 send_message(report)
