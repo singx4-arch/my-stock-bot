@@ -14,7 +14,6 @@ def send_message(text):
         print("❌ 오류: 토큰이나 채팅방 ID가 없습니다.")
         return
 
-    # 마크다운 링크 사용을 위해 parse_mode 추가했다이다
     url = f"https://api.telegram.org/bot{token}/sendMessage"
     
     if len(text) > 4000:
@@ -67,9 +66,9 @@ def get_structural_pivots(df, lookback=120, filter_size=3, mode='low'):
 
 # --- [3. 메인 분석 로직] ---
 
-# 지수 상대 강도 비교를 위해 QQQ 데이터를 먼저 가져온다이다
-qqq = yf.Ticker("QQQ").history(period='5d', interval='1d', prepost=True)
-qqq_perf = (qqq['Close'].iloc[-1] - qqq['Close'].iloc[-2]) / qqq['Close'].iloc[-2]
+# 전문가 기준: 최근 20일(1개월) 누적 수익률 비교이다
+qqq_data = yf.Ticker("QQQ").history(period='30d', interval='1d', prepost=True)
+qqq_20d_perf = (qqq_data['Close'].iloc[-1] - qqq_data['Close'].iloc[-21]) / qqq_data['Close'].iloc[-21]
 
 ticker_map = {
     'QQQ': '나스닥100', 'TQQQ': '나스닥3배', 'SOXL': '반도체3배', 'SPY': 'S&P500',
@@ -92,14 +91,6 @@ groups = {
     '🚨 위험 종목 (지지이탈)': []
 }
 
-group_status_labels = {
-    '🚀 골크 + 전고 돌파': '[상승] 🔥',
-    '💎 눌림 종목군 (매수기회)': '[상승] 🔥',
-    '⏳ 눌림 보류 (몸통 이탈)': '[주의]',
-    '⚠️ 눌림 주의 (추세둔화)': '[주의]',
-    '🚨 위험 종목 (지지이탈)': '[주의]'
-}
-
 for symbol, name in ticker_map.items():
     try:
         print(f"..{symbol}", end=" ", flush=True)
@@ -110,22 +101,23 @@ for symbol, name in ticker_map.items():
         curr_p = float(df['Close'].iloc[-1])
         curr_open = float(df['Open'].iloc[-1])
         curr_vol = float(df['Volume'].iloc[-1])
-        prev_p = float(df['Close'].iloc[-2])
         
-        # 1. 기술 지표 계산이다
+        # 20일 누적 수익률 계산이다
+        stock_20d_perf = (df['Close'].iloc[-1] - df['Close'].iloc[-21]) / df['Close'].iloc[-21]
+        
+        # 기술 지표 계산이다
         df['SMMA7'] = df['Close'].ewm(alpha=1/7, adjust=False).mean()
         df['MA20'] = df['Close'].rolling(window=20).mean()
         df['VolMA20'] = df['Volume'].rolling(window=20).mean()
         df['RSI'] = calculate_rsi(df['Close'])
         
-        # 볼린저 밴드 및 스퀴즈 계산이다
+        # 볼린저 밴드 스퀴즈 계산이다
         std = df['Close'].rolling(window=20).std()
         df['BB_Width'] = (std * 4) / df['MA20']
         is_squeeze = df['BB_Width'].iloc[-1] < df['BB_Width'].rolling(window=120).min().iloc[-2] * 1.1
 
         curr_rsi = df['RSI'].iloc[-1]
         vol_ratio = curr_vol / df['VolMA20'].iloc[-2]
-        stock_perf = (curr_p - prev_p) / prev_p
         
         is_golden = (df['SMMA7'].iloc[-1] > df['MA20'].iloc[-1])
         low_pivots = get_structural_pivots(df, mode='low')
@@ -136,52 +128,49 @@ for symbol, name in ticker_map.items():
         is_breakout = curr_p > high_pivots[0]['val']
         is_hl = low_pivots[0]['val'] > (low_pivots[1]['val'] if len(low_pivots) > 1 else 0)
 
-        # 2. 태그 생성 로직이다
-        tags = []
-        if stock_perf > qqq_perf: tags.append("💪지수보다강함")
-        if is_squeeze: tags.append("⏳에너지응축")
+        # 이모지 태그 생성이다
+        tags = ""
+        if stock_20d_perf > qqq_20d_perf: tags += "💪"
+        if is_squeeze: tags += "⏳"
         
         chart_link = f"[차트](https://finviz.com/chart.ashx?t={symbol})"
         info = f"{name}({symbol}) {chart_link} (+{((curr_p-support)/support)*100:.1f}%)"
 
-        # 3. 그룹 분류 및 위험/신뢰도 추가이다
         if curr_p < support:
-            danger_tag = " (💀아주위험)" if vol_ratio > 1.3 else ""
-            groups['🚨 위험 종목 (지지이탈)'].append(f"{info}{' '.join(tags)}{danger_tag}")
+            danger_tag = "💀" if vol_ratio > 1.3 else ""
+            groups['🚨 위험 종목 (지지이탈)'].append(f"{info} {tags}{danger_tag}")
             
         elif is_hl:
             if not is_golden:
-                danger_tag = " (💀아주위험)" if vol_ratio > 1.3 else ""
-                groups['⚠️ 눌림 주의 (추세둔화)'].append(f"{info}{' '.join(tags)}{danger_tag}")
+                danger_tag = "💀" if vol_ratio > 1.3 else ""
+                groups['⚠️ 눌림 주의 (추세둔화)'].append(f"{info} {tags}{danger_tag}")
             else:
                 body_bottom = min(curr_open, curr_p)
                 if body_bottom >= df['MA20'].iloc[-1]:
-                    conf_tag = " (⭐신뢰도)" if vol_ratio < 0.85 else ""
-                    groups['💎 눌림 종목군 (매수기회)'].append(f"{info}{' '.join(tags)}{conf_tag}")
+                    conf_tag = "⭐" if vol_ratio < 0.85 else ""
+                    groups['💎 눌림 종목군 (매수기회)'].append(f"{info} {tags}{conf_tag}")
                 else:
-                    groups['⏳ 눌림 보류 (몸통 이탈)'].append(f"{info}{' '.join(tags)}")
+                    groups['⏳ 눌림 보류 (몸통 이탈)'].append(f"{info} {tags}")
                     
         elif is_breakout and is_golden:
-            conf_tag = " (⭐신뢰도)" if vol_ratio > 1.3 else ""
-            rsi_tag = " (⚠️과매수주의)" if curr_rsi > 70 else ""
-            groups['🚀 골크 + 전고 돌파'].append(f"{info}{' '.join(tags)}{conf_tag}{rsi_tag}")
+            conf_tag = "⭐" if vol_ratio > 1.3 else ""
+            rsi_tag = "⚠️" if curr_rsi > 70 else ""
+            groups['🚀 골크 + 전고 돌파'].append(f"{info} {tags}{conf_tag}{rsi_tag}")
 
     except Exception as e:
         print(f"Error {symbol}: {e}")
 
 print("\n분석 완료! 리포트 작성 중이다.")
 
-report = "🏛️ 마켓 구조 분석 리포트 \n"
-report += "💪지수보다강함: QQQ 대비 오늘 수익률 우위\n"
-report += "⏳에너지응축: 볼린저 밴드가 극도로 수축된 상태\n"
-report += "⚠️과매수주의: RSI 70 이상으로 단기 상투 위험\n\n"
+report = "🏛️ 마켓 구조 분석 리포트 (v3.2 전문가용 상대 강도)이다\n"
+report += "💪지수보다강함(20일) | ⏳에너지응축 | ⚠️과매수주의 | ⭐신뢰도 | 💀아주위험이다\n\n"
 
 order = ['🚀 골크 + 전고 돌파', '💎 눌림 종목군 (매수기회)', '⏳ 눌림 보류 (몸통 이탈)', 
          '⚠️ 눌림 주의 (추세둔화)', '🚨 위험 종목 (지지이탈)']
 
 for key in order:
     stocks = groups[key]
-    report += f"■ {key} {group_status_labels.get(key, '')}\n"
+    report += f"■ {key}\n"
     if stocks:
         report += "\n".join([f"  - {s}" for s in stocks])
     else:
