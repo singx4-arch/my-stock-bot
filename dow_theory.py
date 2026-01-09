@@ -90,13 +90,14 @@ for symbol, name in ticker_map.items():
     try:
         print(f"..{symbol}", end=" ", flush=True)
         
-        df = yf.download(symbol, period='1y', interval='1d', progress=False)
+        # [수정] prepost=True를 추가하여 프리마켓과 애프터마켓 데이터를 포함한다이다
+        ticker_obj = yf.Ticker(symbol)
+        df = ticker_obj.history(period='1y', interval='1d', prepost=True)
+        
         if len(df) < 120: continue
         
-        if isinstance(df.columns, pd.MultiIndex): 
-            df.columns = df.columns.get_level_values(0)
-
         # 현재가(Close)와 시가(Open)를 가져온다이다
+        # history(interval='1d')에 prepost=True를 쓰면 마지막 행에 프리마켓 시세가 반영된다이다
         curr_p = float(df['Close'].iloc[-1])
         curr_open = float(df['Open'].iloc[-1])
         
@@ -127,10 +128,7 @@ for symbol, name in ticker_map.items():
             if is_dead:
                 groups['⚠️ 눌림 주의 (추세둔화)'].append(info)
             else:
-                # 캔들 몸통의 하단(시가와 종가 중 작은 값)을 구한다이다
                 body_bottom = min(curr_open, curr_p)
-                
-                # 몸통 하단이 20일 이평선보다 크거나 같아야 '성공'이다
                 if body_bottom >= curr_ma20:
                     groups['💎 눌림 종목군 (매수기회)'].append(info)
                 else:
@@ -149,8 +147,8 @@ for symbol, name in ticker_map.items():
 
 print("\n분석 완료! 리포트 작성 중...")
 
-report = f"🏛️ 마켓 구조 분석 리포트 (Python v1.3 - 몸통 기준)\n"
-report += "(? %)는 추세 전환 전까지의 높이를 말합니다. "  + "\n\n"
+report = f"🏛️ 마켓 구조 분석 리포트 (Python v1.4 - 프리마켓 통합)\n"
+report += "(? %)는 지지선 대비 현재 가격의 높이이다. "  + "\n\n"
 
 order = ['🚀 슈퍼 종목군 (주도주)', '💎 눌림 종목군 (매수기회)', '⏳ 눌림 보류 (몸통 이탈)', 
          '⚠️ 눌림 주의 (추세둔화)', '📦 박스권 (상승유지)', '📉 박스권 (추세둔화)', '🚨 위험 종목 (지지이탈)']
