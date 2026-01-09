@@ -169,7 +169,4 @@ for key in order:
         report += "  - 해당 종목 없음이다"
     report += "\n\n"
 
-report += "-" * 30 + "\n"
-report += "분석 종료이다."
-
 send_message(report)
